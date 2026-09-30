@@ -1,6 +1,5 @@
 using System.Drawing;
 using System.Windows.Forms;
-using Tekla.Structures.Datatype;
 using Tekla.Structures.Dialog;
 
 namespace TeklaAutoGrating
@@ -8,19 +7,19 @@ namespace TeklaAutoGrating
     /// <summary>Plugin dialog, built in code. Fields bind to AutoGratingData via StructuresDialog.</summary>
     public class AutoGratingForm : PluginFormBase
     {
-        [StructuresDialog("MaxWidth", typeof(Distance))] private TextBox _maxWidth;
-        [StructuresDialog("MaxLength", typeof(Distance))] private TextBox _maxLength;
-        [StructuresDialog("PanelGap", typeof(Distance))] private TextBox _gap;
-        [StructuresDialog("EdgeClearance", typeof(Distance))] private TextBox _edge;
-        [StructuresDialog("GratingHeight", typeof(Distance))] private TextBox _height;
-        [StructuresDialog("GratingProfileName", typeof(Tekla.Structures.Datatype.String))] private TextBox _name;
-        [StructuresDialog("Material", typeof(Tekla.Structures.Datatype.String))] private TextBox _material;
-        [StructuresDialog("AutoOpening", typeof(Integer))] private CheckBox _autoOpening;
-        [StructuresDialog("OpeningClearance", typeof(Distance))] private TextBox _openClear;
-        [StructuresDialog("OpeningRound", typeof(Distance))] private TextBox _openRound;
-        [StructuresDialog("TopPlate", typeof(Integer))] private CheckBox _topPlate;
-        [StructuresDialog("TopPlateThickness", typeof(Distance))] private TextBox _tpThk;
-        [StructuresDialog("TopPlateMaterial", typeof(Tekla.Structures.Datatype.String))] private TextBox _tpMat;
+        private TextBox _maxWidth;
+        private TextBox _maxLength;
+        private TextBox _gap;
+        private TextBox _edge;
+        private TextBox _height;
+        private TextBox _name;
+        private TextBox _material;
+        private CheckBox _autoOpening;
+        private TextBox _openClear;
+        private TextBox _openRound;
+        private CheckBox _topPlate;
+        private TextBox _tpThk;
+        private TextBox _tpMat;
 
         public AutoGratingForm()
         {
@@ -50,7 +49,27 @@ namespace TeklaAutoGrating
             buttons.Controls.Add(Btn("Cancel", (s, e) => Close()));
             Controls.Add(buttons);
 
+            Bind(_maxWidth, "MaxWidth", "Distance");
+            Bind(_maxLength, "MaxLength", "Distance");
+            Bind(_gap, "PanelGap", "Distance");
+            Bind(_edge, "EdgeClearance", "Distance");
+            Bind(_height, "GratingHeight", "Distance");
+            Bind(_name, "GratingProfileName", "String");
+            Bind(_material, "Material", "String");
+            Bind(_autoOpening, "AutoOpening", "Integer");
+            Bind(_openClear, "OpeningClearance", "Distance");
+            Bind(_openRound, "OpeningRound", "Distance");
+            Bind(_topPlate, "TopPlate", "Integer");
+            Bind(_tpThk, "TopPlateThickness", "Distance");
+            Bind(_tpMat, "TopPlateMaterial", "String");
+
             InitializeForm();
+        }
+
+        private void Bind(Control c, string attribute, string typeName)
+        {
+            structuresExtender.SetAttributeName(c, attribute);
+            structuresExtender.SetAttributeTypeName(c, typeName);
         }
 
         private static Button Btn(string text, System.EventHandler h)
