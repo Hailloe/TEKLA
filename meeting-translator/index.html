@@ -49,7 +49,7 @@
   .ai { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
   .ai[hidden] { display: none; }
   .ai label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
-  .ai input, .ai select { font: inherit; font-size: 14px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 100%; }
+  .ai input, .ai select { font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 100%; }
   .ai .wide { grid-column: 1 / -1; }
   .ai .note { grid-column: 1 / -1; font-size: 12px; color: var(--muted); line-height: 1.5; }
   .ai a { color: var(--accent); }
@@ -166,6 +166,7 @@
     engine: store.get('engine', 'google'), fs: store.get('fs', 22), showEn: store.get('showEn', true),
     key: store.get('key', ''), model: store.get('model', 'claude-opus-5-5'), ctx: store.get('ctx', '')
   };
+  if (![...$('aiModel').options].some((o) => o.value === settings.model)) settings.model = 'claude-opus-5-5';
   $('aiKey').value = settings.key; $('aiModel').value = settings.model; $('aiCtx').value = settings.ctx;
   // The AI settings panel folds away while translating so the transcript gets the screen.
   const applyEngine = () => { $('aiBox').hidden = settings.engine !== 'claude' || (running && !!settings.key); };
@@ -193,9 +194,9 @@
   async function translate(text) {
     text = text.trim();
     if (!text) return '';
-    const key = settings.src + '|' + settings.dst + '|' + text;
-    if (cache.has(key)) return cache.get(key);
     const order = settings.engine === 'mymemory' ? [mymemory, google] : [google, mymemory];
+    const key = order[0].name + '|' + settings.src + '|' + settings.dst + '|' + text;
+    if (cache.has(key)) return cache.get(key);
     let lastErr;
     for (const fn of order) {
       try {
@@ -227,15 +228,18 @@
     ms: 'Malay', id: 'Indonesian', fr: 'French', de: 'German', es: 'Spanish' };
 
   // Streams a context-aware translation from the Claude Messages API; onText gets the text so far.
-  async function claude(text, onText) {
+  const inflight = new Set(); // AbortControllers of running Claude requests
+  async function claude(seg, onText) {
+    const text = seg.en;
     if (!settings.key) throw new Error('请先在上方填写 Claude API Key');
     const srcName = LANG_NAMES[srcCode()] || settings.src;
     const dstName = settings.dst === 'zh-TW' ? 'Traditional Chinese (繁體中文)' : 'Simplified Chinese (简体中文)';
     let system = `You are a professional live interpreter. Each user message contains one new segment of a live speech-recognition transcript in ${srcName}. Translate it into natural, fluent ${dstName}, the way a skilled human interpreter would say it. Speech recognition sometimes mishears words or splits sentences oddly; use the recent context to infer what the speaker meant. Reply with only the translation of the new segment - no quotes, notes, or original text.`;
     if (settings.ctx) system += `\n\nBackground and terminology from the listener:\n${settings.ctx}`;
-    const recent = segments.filter((s) => s.zh && s.en !== text).slice(-3)
-      .map((s) => `${s.en}\n=> ${s.zh}`).join('\n\n');
-    const content = (recent ? `Recent context (already translated):\n${recent}\n\n` : '') + `New segment to translate:\n${text}`;
+    // Earlier segments still being translated are included as source text only.
+    const prev = segments.slice(0, segments.indexOf(seg)).slice(-3)
+      .map((s) => (s.zh ? `${s.en}\n=> ${s.zh}` : s.en)).join('\n\n');
+    const content = (prev ? `Recent context:\n${prev}\n\n` : '') + `New segment to translate:\n${text}`;
 
     const body = {
       model: settings.model, max_tokens: 2048, stream: true,
@@ -253,31 +257,29 @@
       body.fallbacks = 'default';
       headers['anthropic-beta'] = 'server-side-fallback-2026-07-01';
     }
-    const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers, body: JSON.stringify(body) });
-    if (!r.ok) {
-      let msg = 'HTTP ' + r.status;
-      try { msg = (await r.json()).error.message || msg; } catch {}
-      if (r.status === 401) msg = 'API Key 无效';
-      if (r.status === 429) msg = '请求太频繁或额度不足';
-      throw new Error('Claude：' + msg);
-    }
-    const reader = r.body.getReader(), dec = new TextDecoder();
-    let buf = '', out = '', stop = null;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      let i;
-      while ((i = buf.indexOf('\n\n')) >= 0) {
-        const chunk = buf.slice(0, i);
-        buf = buf.slice(i + 2);
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 25000);
+    inflight.add(ctl);
+    let reader;
+    try {
+      const r = await fetch('https://api.anthropic.com/v1/messages',
+        { method: 'POST', headers, body: JSON.stringify(body), signal: ctl.signal });
+      if (!r.ok) {
+        let detail = '';
+        try { detail = (await r.json()).error.message || ''; } catch {}
+        const label = { 401: 'API Key 无效', 403: '没有权限', 429: '超出速率或额度限制', 529: '服务繁忙' }[r.status] || 'HTTP ' + r.status;
+        throw new Error('Claude ' + label + (detail ? '：' + detail : ''));
+      }
+      reader = r.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '', out = '', stop = null;
+      const handle = (chunk) => {
         for (const line of chunk.split('\n')) {
           if (!line.startsWith('data:')) continue;
           let ev;
           try { ev = JSON.parse(line.slice(5)); } catch { continue; }
-          if (ev.type === 'content_block_start' && ev.content_block?.type === 'fallback') {
-            out = ''; // a declined model's partial output is discarded; the fallback model restarts
-          } else if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
+          // On a mid-stream server-side fallback the partial text is kept and the fallback model continues it.
+          if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
             out += ev.delta.text;
             onText(out);
           } else if (ev.type === 'message_delta' && ev.delta?.stop_reason) {
@@ -286,10 +288,28 @@
             throw new Error('Claude：' + (ev.error?.message || '服务错误'));
           }
         }
+      };
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n\n')) >= 0) {
+          handle(buf.slice(0, i));
+          buf = buf.slice(i + 2);
+        }
       }
+      handle(buf + dec.decode());
+      if (stop === 'refusal') throw new Error('Claude 未翻译这一句');
+      return out.trim();
+    } catch (e) {
+      if (e.name === 'AbortError') throw new Error('Claude 响应超时');
+      throw e;
+    } finally {
+      clearTimeout(timer);
+      inflight.delete(ctl);
+      try { reader && (await reader.cancel()); } catch {}
     }
-    if (stop === 'refusal') throw new Error('Claude 未翻译这一句');
-    return out.trim();
   }
 
   // ---------- transcript UI ----------
@@ -341,24 +361,28 @@
     el.querySelector('.t').textContent = fmtTime(seg.time);
     scrollDown(stick);
     const zhEl = el.querySelector('.zh');
+    // Only the newest segment reports status, so a slow older request can't hide a newer error.
+    const report = (msg, isErr) => { if (segments[segments.length - 1] === seg) setStatus(msg, isErr); };
+    let note = '';
     if (settings.engine === 'claude') {
       try {
-        seg.zh = await claude(text, (partial) => { zhEl.textContent = partial; scrollDown(stick); });
+        seg.zh = await claude(seg, (partial) => { zhEl.textContent = partial; scrollDown(stick); });
         zhEl.textContent = seg.zh;
-        setStatus(running ? '正在聆听…' : '');
+        report(running ? '正在聆听…' : '');
         scrollDown(stick);
         return;
       } catch (e) {
-        setStatus(e.message + '（这句已改用 Google 翻译）', true);
+        if (!segments.includes(seg)) return; // transcript was cleared
+        note = e.message + '（这句已改用 Google 翻译）';
       }
     }
     try {
       seg.zh = await translate(text);
       zhEl.textContent = seg.zh;
-      if (settings.engine !== 'claude') setStatus(running ? '正在聆听…' : '');
+      report(note || (running ? '正在聆听…' : ''), !!note);
     } catch (e) {
-      el.querySelector('.zh').textContent = '（翻译失败）';
-      setStatus('翻译服务连接失败：' + e.message + '。可在顶部切换翻译引擎。', true);
+      zhEl.textContent = '（翻译失败）';
+      report('翻译服务连接失败：' + e.message + '。可在顶部切换翻译引擎。', true);
     }
     scrollDown(stick);
   }
@@ -433,6 +457,7 @@
 
   $('clear').onclick = () => {
     if (segments.length && !confirm('清空所有记录？')) return;
+    inflight.forEach((c) => c.abort());
     segments.length = 0; list.innerHTML = ''; liveEl = null;
   };
   $('export').onclick = () => {
