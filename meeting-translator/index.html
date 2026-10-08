@@ -54,7 +54,11 @@
   .ai [data-hidden] { display: none; }
   .ai .note { grid-column: 1 / -1; font-size: 12px; color: var(--muted); line-height: 1.5; }
   .ai a { color: var(--accent); }
-  #status { font-size: 13px; color: var(--muted); padding: 6px 16px; min-height: 28px; }
+  .statusbar { display: flex; align-items: center; gap: 8px; padding: 6px 16px; min-height: 28px; }
+  #status { font-size: 13px; color: var(--muted); }
+  #meter { flex: none; width: 56px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  #meter[hidden] { display: none; }
+  #meter i { display: block; height: 100%; width: 0; background: #16a34a; transition: width .1s; }
   #status.err { color: var(--danger); }
   main { flex: 1; overflow-y: auto; padding: 8px 16px 24px; scroll-behavior: smooth; }
   .seg { padding: 10px 0; border-bottom: 1px solid var(--line); }
@@ -155,7 +159,7 @@
     API Key 只保存在本机浏览器里，只发送给上面的接口地址。
   </div>
 </section>
-<div id="status"></div>
+<div class="statusbar"><div id="meter" hidden title="收到的音量"><i></i></div><div id="status"></div></div>
 <main id="list">
   <div class="empty" id="empty">
     点击下方 <b>开始翻译</b>，允许使用麦克风。<br>
@@ -486,7 +490,58 @@
 
   // ---------- speech recognition ----------
   let rec = null, wakeLock = null, restartTimer = null, capture = null, audioTrack = null;
-  const recStart = (r) => { try { audioTrack ? r.start(audioTrack) : r.start(); } catch {} };
+  const recStart = (r) => {
+    try {
+      audioTrack ? r.start(audioTrack) : r.start();
+    } catch (e) {
+      if (e.name === 'InvalidStateError' && !audioTrack) return; // already running
+      setStatus('无法开始语音识别：' + e.message
+        + (audioTrack ? '（电脑声音模式需要电脑版 Chrome / Edge 135 以上）' : ''), true);
+    }
+  };
+
+  // Volume meter, so it is obvious whether any sound reaches the page at all.
+  let meterCtx = null, meterMic = null, meterTimer = null, quietSince = 0, quietShown = false;
+  const QUIET_MSG = () => (audioTrack
+    ? '没有收到声音：请确认视频正在播放，并且共享时打开了「分享标签页音频 / 系统音频」。'
+    : '麦克风没有收到声音：戴耳机时请把声音来源改成「电脑声音」，或把外放音量调大。');
+  async function startMeter() {
+    try {
+      if (!audioTrack) meterMic = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = audioTrack ? new MediaStream([audioTrack]) : meterMic;
+      meterCtx = new AudioContext();
+      await meterCtx.resume();
+      const an = meterCtx.createAnalyser();
+      an.fftSize = 1024;
+      meterCtx.createMediaStreamSource(stream).connect(an);
+      const buf = new Float32Array(an.fftSize);
+      const bar = $('meter').firstElementChild;
+      $('meter').hidden = false;
+      quietSince = Date.now(); quietShown = false;
+      meterTimer = setInterval(() => {
+        an.getFloatTimeDomainData(buf);
+        let sum = 0;
+        for (const v of buf) sum += v * v;
+        const level = Math.min(1, Math.sqrt(sum / buf.length) * 8);
+        bar.style.width = Math.round(level * 100) + '%';
+        if (level > 0.04) {
+          quietSince = Date.now();
+          if (quietShown) { quietShown = false; setStatus('收到声音了，正在聆听…'); }
+        } else if (!quietShown && Date.now() - quietSince > 6000) {
+          quietShown = true;
+          setStatus(QUIET_MSG(), true);
+        }
+      }, 100);
+    } catch {}
+  }
+  function stopMeter() {
+    clearInterval(meterTimer); meterTimer = null;
+    try { meterCtx && meterCtx.close(); } catch {}
+    meterCtx = null;
+    meterMic?.getTracks().forEach((t) => t.stop());
+    meterMic = null;
+    $('meter').hidden = true;
+  }
 
   // Asks the user to share a tab/screen with audio; returns false if they cancel or share no audio.
   async function startCapture() {
@@ -529,8 +584,10 @@
       }
       if (interim.trim()) showLive(interim.trim());
     };
+    r.onspeechstart = () => { if (!quietShown) setStatus('听到说话了，正在识别…'); };
     r.onerror = (ev) => {
       if (ev.error === 'no-speech' || ev.error === 'aborted') return;
+      if (ev.error === 'audio-capture') { setStatus('拿不到声音：找不到麦克风，或声音来源不可用。', true); return; }
       if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
         setStatus('麦克风权限被拒绝。请在浏览器地址栏里允许麦克风后重试。', true);
         stop();
@@ -560,12 +617,14 @@
     recStart(rec);
     micBtn.classList.add('on'); micLabel.textContent = '停止'; applyEngine();
     setStatus(audioTrack ? '正在聆听电脑声音…' : '正在聆听…');
+    startMeter();
     try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
   }
   function stop() {
     running = false;
     clearTimeout(restartTimer);
     try { rec && rec.stop(); } catch {}
+    stopMeter();
     stopCapture();
     micBtn.classList.remove('on'); micLabel.textContent = '开始翻译'; applyEngine();
     if (!statusEl.classList.contains('err')) setStatus('已停止');
