@@ -134,6 +134,8 @@
   <button id="fsUp" title="放大字体">A+</button>
   <button id="toggleEn" title="显示/隐藏原文">原文</button>
   <button id="pip" title="打开一个置顶的悬浮字幕小窗，可以放在视频或 Teams 旁边" hidden>小窗</button>
+  <button id="ovl" title="显示/隐藏桌面字幕层（Ctrl+Shift+H）" hidden>字幕层</button>
+  <button id="ovlLock" title="锁定后鼠标可以点穿字幕；解锁后可以拖动、调大小（Ctrl+Shift+L）" hidden>🔒 已锁定</button>
   <button id="settingsBtn" title="设置 API Key、AI 语音识别、会议专有名词">⚙️ 设置</button>
 </header>
 <dialog id="settings">
@@ -219,6 +221,7 @@
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   let running = false;
   let pipWin = null, pipSync = null; // floating subtitle window and its refresh, when open
+  let desktopSync = null; // pushes the newest lines to the desktop overlay, in the desktop app
 
   // ---------- settings (per-device convenience) ----------
   const store = {
@@ -236,6 +239,15 @@
     sttBase: store.get('sttBase', 'https://api.siliconflow.cn/v1')
   };
   if (![...$('aiModel').options].some((o) => o.value === settings.model)) settings.model = 'claude-opus-5-5';
+  // Desktop subtitle app (Electron): the browser's built-in recognizer has no speech service
+  // there, so AI recognition is the only option.
+  const desktop = window.desktop || null;
+  if (desktop) {
+    settings.stt = 'ai';
+    const opt = $('stt').querySelector('option[value="browser"]');
+    opt.disabled = true;
+    opt.textContent += '（桌面版不可用）';
+  }
   $('aiKey').value = settings.key; $('aiModel').value = settings.model; $('aiCtx').value = settings.ctx;
   for (const k of ['oaiKey', 'oaiModel', 'oaiBase', 'sttKey', 'sttModel', 'sttBase']) $(k).value = settings[k];
   $('stt').value = settings.stt;
@@ -273,10 +285,12 @@
   const applyFs = () => {
     document.documentElement.style.setProperty('--fs', settings.fs + 'px');
     pipWin?.document.documentElement.style.setProperty('--fs', settings.fs + 'px');
+    desktopSync?.();
   };
   const applyEn = () => {
     document.body.classList.toggle('hide-en', !settings.showEn);
     pipWin?.document.body.classList.toggle('hide-en', !settings.showEn);
+    desktopSync?.();
   };
   applyFs(); applyEn();
 
@@ -285,10 +299,15 @@
   const chromeVer = +((navigator.userAgent.match(/Chrom(?:e|ium)\/(\d+)/) || [])[1] || 0);
   const canSystem = chromeVer >= 135 && !/Android|Mobile/i.test(navigator.userAgent)
     && !!navigator.mediaDevices?.getDisplayMedia;
-  settings.source = canSystem ? store.get('source', 'mic') : 'mic';
+  settings.source = canSystem ? store.get('source', desktop ? 'system' : 'mic') : 'mic';
   $('source').hidden = !canSystem;
   $('source').value = settings.source;
-  if (canSystem) {
+  if (desktop) {
+    $('empty').innerHTML = '桌面字幕版：翻译会显示在屏幕上一层透明字幕里，浮在所有程序上面。<br>'
+      + '1. 先点 <b>⚙️ 设置</b>，填好 AI 语音识别的 Key（和想用的 AI 翻译 Key）<br>'
+      + '2. 左上角声音来源选 <b>电脑声音</b>（会议、视频的声音）或加上 <b>我的麦克风</b><br>'
+      + '3. 点 <b>开始翻译</b>。字幕层默认锁定，鼠标可以点穿它；按 <b>Ctrl+Shift+L</b> 解锁后可拖动、调大小，<b>Ctrl+Shift+H</b> 隐藏/显示';
+  } else if (canSystem) {
     $('empty')?.insertAdjacentHTML('beforeend',
       '<br><br>💻 在电脑上开 Teams / Zoom 会议：左上角声音来源选 <b>电脑声音</b>，<br>'
       + '点开始后选择会议所在的窗口或「整个屏幕」，并勾选 <b>共享音频</b>。戴耳机也能翻译。<br>'
@@ -373,6 +392,29 @@
       $('pip').textContent = '小窗';
     });
   };
+
+  // ---------- desktop subtitle overlay (only inside the Electron app) ----------
+  if (desktop) {
+    $('pip').remove();
+    $('ovl').hidden = false; $('ovlLock').hidden = false;
+    $('ovl').onclick = () => desktop.toggleOverlay();
+    $('ovlLock').onclick = () => desktop.toggleLock();
+    desktop.onOverlayState(({ visible, locked }) => {
+      $('ovl').textContent = visible ? '隐藏字幕层' : '显示字幕层';
+      $('ovlLock').textContent = locked ? '🔒 已锁定' : '🔓 可拖动';
+    });
+    $('ovl').textContent = '隐藏字幕层';
+    desktopSync = () => {
+      const lines = [...list.querySelectorAll('.seg')].slice(-2).map((el) => ({
+        zh: el.querySelector('.zh').textContent,
+        en: el.querySelector('.en').textContent,
+        live: el.classList.contains('live'),
+        who: (el.querySelector('.t').textContent.match(/^(我|对方) · /) || [])[1] || ''
+      }));
+      desktop.sendSubtitles({ fs: settings.fs, showEn: settings.showEn, running, lines });
+    };
+    new MutationObserver(() => desktopSync()).observe(list, { childList: true, subtree: true, characterData: true });
+  }
 
   function setStatus(msg, isErr) { statusEl.textContent = msg || ''; statusEl.classList.toggle('err', !!isErr); }
 
@@ -927,7 +969,7 @@
     micBtn.classList.add('on'); micLabel.textContent = '停止';
     setStatus((useAI ? 'AI 识别：' : '') + ({ mic: '正在聆听…', system: '正在聆听电脑声音…', both: '正在聆听电脑声音和我的麦克风…' })[src]);
     startMeter();
-    pipSync?.();
+    pipSync?.(); desktopSync?.();
     try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
   }
   function stop() {
@@ -944,7 +986,7 @@
     try { audioCtx && audioCtx.close(); } catch {}
     audioCtx = null;
     micBtn.classList.remove('on'); micLabel.textContent = '开始翻译';
-    pipSync?.();
+    pipSync?.(); desktopSync?.();
     if (!statusEl.classList.contains('err')) setStatus('已停止');
     try { wakeLock && wakeLock.release(); } catch {}
     wakeLock = null;

@@ -53,6 +53,10 @@
 Claude 的结果出来之前，屏幕上会先保留 Google 的预览，所以看起来几乎没有空白等待。
 追求最低延迟选 Haiku 5.5；追求翻译质量选 Opus 5.5。
 
+## 桌面字幕版（Windows）
+
+想要 **透明背景、鼠标可以点穿** 的字幕，浮在 Teams、视频等任何程序上面：到仓库 **Releases** 页面下载 `LiveSubtitles` 桌面版，说明见 [desktop-subtitles/README.md](../desktop-subtitles/README.md)。
+
 ## 怎么用
 
 1. 用浏览器打开网址（需要 **https**，否则浏览器不给麦克风权限）

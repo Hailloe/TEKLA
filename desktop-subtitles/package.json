@@ -1,0 +1,44 @@
+{
+  "name": "desktop-subtitles",
+  "productName": "LiveSubtitles",
+  "version": "1.0.0",
+  "description": "实时翻译字幕（桌面版）：透明、置顶、鼠标可穿透的字幕层",
+  "author": "Hailloe",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "copy-web": "node copy-web.js",
+    "start": "npm run copy-web && electron .",
+    "dist": "npm run copy-web && electron-builder --win --publish never"
+  },
+  "devDependencies": {
+    "electron": "43.7.3",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "io.github.hailloe.livesubtitles",
+    "productName": "LiveSubtitles",
+    "files": [
+      "main.js",
+      "main-preload.js",
+      "overlay-preload.js",
+      "overlay.html",
+      "web/**"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "实时翻译字幕",
+      "artifactName": "LiveSubtitles-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "LiveSubtitles-${version}-portable.${ext}"
+    }
+  }
+}
