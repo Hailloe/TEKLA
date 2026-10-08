@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#2563eb"/>
+  <text x="150" y="300" font-family="Arial, sans-serif" font-size="190" font-weight="700" fill="#fff" text-anchor="middle">A</text>
+  <text x="350" y="400" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="190" font-weight="700" fill="#fff" text-anchor="middle">文</text>
+  <path d="M250 150 h70 l-20 -20 M320 150 l-20 20" stroke="#fff" stroke-width="18" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
