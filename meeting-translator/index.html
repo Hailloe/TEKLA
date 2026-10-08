@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>实时翻译</title>
+<meta name="theme-color" content="#111418">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #16191d; --muted: #6b7280;
+    --line: #e3e6ea; --accent: #2563eb; --accent-text: #fff; --danger: #dc2626;
+    --zh: #0f172a; --en: #4b5563; --live: #9ca3af;
+    --fs: 22px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111418; --panel: #1a1f25; --text: #e7eaee; --muted: #9aa3ad;
+      --line: #2a3139; --accent: #3b82f6; --zh: #f3f5f7; --en: #a8b1bb; --live: #6b7480;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111418; --panel: #1a1f25; --text: #e7eaee; --muted: #9aa3ad;
+    --line: #2a3139; --accent: #3b82f6; --zh: #f3f5f7; --en: #a8b1bb; --live: #6b7480;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: flex; flex-direction: column;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { font-size: 16px; margin: 0 auto 0 0; font-weight: 600; }
+  select, button {
+    font: inherit; font-size: 14px; color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
+  }
+  button { cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .ai { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .ai[hidden] { display: none; }
+  .ai label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .ai input, .ai select { font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 100%; }
+  .ai .wide { grid-column: 1 / -1; }
+  .ai .note { grid-column: 1 / -1; font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .ai a { color: var(--accent); }
+  #status { font-size: 13px; color: var(--muted); padding: 6px 16px; min-height: 28px; }
+  #status.err { color: var(--danger); }
+  main { flex: 1; overflow-y: auto; padding: 8px 16px 24px; scroll-behavior: smooth; }
+  .seg { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .seg .zh { font-size: var(--fs); line-height: 1.45; color: var(--zh); font-weight: 500; }
+  .seg .en { font-size: calc(var(--fs) * .68); line-height: 1.4; color: var(--en); margin-top: 4px; }
+  .seg .t { font-size: 11px; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .seg.live .zh, .seg.live .en { color: var(--live); }
+  body.hide-en .seg .en { display: none; }
+  .empty { color: var(--muted); text-align: center; margin-top: 18vh; line-height: 1.8; font-size: 15px; }
+  footer {
+    display: flex; gap: 10px; align-items: center; justify-content: center;
+    padding: 12px 16px; border-top: 1px solid var(--line); background: var(--panel);
+  }
+  #mic {
+    min-width: 160px; padding: 12px 22px; font-size: 17px; font-weight: 600;
+    background: var(--accent); color: var(--accent-text); border: none; border-radius: 999px;
+  }
+  #mic.on { background: var(--danger); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: middle; }
+  #mic.on .dot { animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .2; } }
+  .small { font-size: 13px; padding: 8px 12px; }
+  @media (max-width: 560px) {
+    header h1 { width: 100%; }
+    #mic { flex: 1; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>实时翻译</h1>
+  <select id="source" title="声音来源" hidden>
+    <option value="mic">🎤 麦克风</option>
+    <option value="system">💻 电脑声音（Teams / 视频）</option>
+  </select>
+  <select id="srcLang" title="说话人语言">
+    <option value="en-US">英语 (美)</option>
+    <option value="en-GB">英语 (英)</option>
+    <option value="en-AU">英语 (澳)</option>
+    <option value="en-IN">英语 (印)</option>
+    <option value="en-SG">英语 (新加坡)</option>
+    <option value="th-TH">泰语</option>
+    <option value="ja-JP">日语</option>
+    <option value="ko-KR">韩语</option>
+    <option value="vi-VN">越南语</option>
+    <option value="ms-MY">马来语</option>
+    <option value="id-ID">印尼语</option>
+    <option value="fr-FR">法语</option>
+    <option value="de-DE">德语</option>
+    <option value="es-ES">西班牙语</option>
+  </select>
+  <span aria-hidden="true">→</span>
+  <select id="dstLang" title="翻译成">
+    <option value="zh-CN">简体中文</option>
+    <option value="zh-TW">繁體中文</option>
+  </select>
+  <select id="engine" title="翻译引擎">
+    <option value="claude">Claude AI 翻译</option>
+    <option value="google">Google 翻译</option>
+    <option value="mymemory">MyMemory</option>
+  </select>
+  <button id="fsDown" title="缩小字体">A−</button>
+  <button id="fsUp" title="放大字体">A+</button>
+  <button id="toggleEn" title="显示/隐藏原文">原文</button>
+</header>
+<section class="ai" id="aiBox" hidden>
+  <label>Claude API Key
+    <input id="aiKey" type="password" autocomplete="off" placeholder="sk-ant-...">
+  </label>
+  <label>模型
+    <select id="aiModel">
+      <option value="claude-opus-5-5">Opus 5.5（最准）</option>
+      <option value="claude-sonnet-5-5">Sonnet 5.5（较快）</option>
+      <option value="claude-haiku-5-5">Haiku 5.5（最快最省）</option>
+    </select>
+  </label>
+  <label class="wide">会议主题 / 专有名词（可选，让 AI 翻得更准）
+    <input id="aiCtx" type="text" placeholder="例如：钢结构项目周会；Tekla、BIM、shop drawing、RFI">
+  </label>
+  <div class="note">
+    说话时先用 Google 显示即时预览，一句话说完后由 Claude 结合上下文重新翻译（逐字显示）。
+    API Key 只保存在本机浏览器里，只发送给 api.anthropic.com。
+    在 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a> 申请 Key。
+  </div>
+</section>
+<div id="status"></div>
+<main id="list">
+  <div class="empty" id="empty">
+    点击下方 <b>开始翻译</b>，允许使用麦克风。<br>
+    开会、看电视、看视频都可以：把手机/电脑放在能听清声音的位置即可。<br>
+    推荐使用 Chrome / Edge（电脑、安卓）或 Safari（iPhone）。
+  </div>
+</main>
+<footer>
+  <button id="clear" class="small">清空</button>
+  <button id="mic"><span class="dot"></span><span id="micLabel">开始翻译</span></button>
+  <button id="export" class="small">导出</button>
+</footer>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const list = $('list'), statusEl = $('status'), micBtn = $('mic'), micLabel = $('micLabel');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let running = false;
+
+  // ---------- settings (per-device convenience) ----------
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('mt.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('mt.' + k, JSON.stringify(v)); } catch {} }
+  };
+  const settings = {
+    src: store.get('src', 'en-US'), dst: store.get('dst', 'zh-CN'),
+    engine: store.get('engine', 'google'), fs: store.get('fs', 22), showEn: store.get('showEn', true),
+    key: store.get('key', ''), model: store.get('model', 'claude-opus-5-5'), ctx: store.get('ctx', '')
+  };
+  if (![...$('aiModel').options].some((o) => o.value === settings.model)) settings.model = 'claude-opus-5-5';
+  $('aiKey').value = settings.key; $('aiModel').value = settings.model; $('aiCtx').value = settings.ctx;
+  // The AI settings panel folds away while translating so the transcript gets the screen.
+  const applyEngine = () => { $('aiBox').hidden = settings.engine !== 'claude' || (running && !!settings.key); };
+  applyEngine();
+  $('aiKey').onchange = (e) => { settings.key = e.target.value.trim(); store.set('key', settings.key); };
+  $('aiModel').onchange = (e) => { settings.model = e.target.value; store.set('model', settings.model); };
+  $('aiCtx').onchange = (e) => { settings.ctx = e.target.value.trim(); store.set('ctx', settings.ctx); };
+  $('srcLang').value = settings.src; $('dstLang').value = settings.dst; $('engine').value = settings.engine;
+  const applyFs = () => document.documentElement.style.setProperty('--fs', settings.fs + 'px');
+  const applyEn = () => document.body.classList.toggle('hide-en', !settings.showEn);
+  applyFs(); applyEn();
+
+  // Desktop Chrome/Edge 135+ can run speech recognition on a captured audio track
+  // (Teams tab or system audio), so headphones work. Elsewhere only the microphone is available.
+  const chromeVer = +((navigator.userAgent.match(/Chrom(?:e|ium)\/(\d+)/) || [])[1] || 0);
+  const canSystem = chromeVer >= 135 && !/Android|Mobile/i.test(navigator.userAgent)
+    && !!navigator.mediaDevices?.getDisplayMedia;
+  settings.source = canSystem ? store.get('source', 'mic') : 'mic';
+  $('source').hidden = !canSystem;
+  $('source').value = settings.source;
+  if (canSystem) {
+    $('empty')?.insertAdjacentHTML('beforeend',
+      '<br><br>💻 在电脑上开 Teams / Zoom 会议：左上角声音来源选 <b>电脑声音</b>，<br>'
+      + '点开始后选择会议所在的窗口或「整个屏幕」，并勾选 <b>共享音频</b>。戴耳机也能翻译。');
+  }
+  $('source').onchange = (e) => { settings.source = e.target.value; store.set('source', settings.source); if (running) { stop(); start(); } };
+  $('srcLang').onchange = (e) => { settings.src = e.target.value; store.set('src', settings.src); if (running) restart(); };
+  $('dstLang').onchange = (e) => { settings.dst = e.target.value; store.set('dst', settings.dst); };
+  $('engine').onchange = (e) => { settings.engine = e.target.value; store.set('engine', settings.engine); applyEngine(); };
+  $('fsUp').onclick = () => { settings.fs = Math.min(48, settings.fs + 2); store.set('fs', settings.fs); applyFs(); };
+  $('fsDown').onclick = () => { settings.fs = Math.max(14, settings.fs - 2); store.set('fs', settings.fs); applyFs(); };
+  $('toggleEn').onclick = () => { settings.showEn = !settings.showEn; store.set('showEn', settings.showEn); applyEn(); };
+
+  function setStatus(msg, isErr) { statusEl.textContent = msg || ''; statusEl.classList.toggle('err', !!isErr); }
+
+  // ---------- translation ----------
+  const cache = new Map();
+  const srcCode = () => settings.src.split('-')[0];
+  async function translate(text) {
+    text = text.trim();
+    if (!text) return '';
+    const order = settings.engine === 'mymemory' ? [mymemory, google] : [google, mymemory];
+    const key = order[0].name + '|' + settings.src + '|' + settings.dst + '|' + text;
+    if (cache.has(key)) return cache.get(key);
+    let lastErr;
+    for (const fn of order) {
+      try {
+        const out = await fn(text, settings.dst);
+        if (out) { cache.set(key, out); return out; }
+      } catch (e) { lastErr = e; }
+    }
+    throw lastErr || new Error('翻译失败');
+  }
+  async function google(text, dst) {
+    const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=' + srcCode() + '&tl='
+      + encodeURIComponent(dst) + '&q=' + encodeURIComponent(text);
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('Google ' + r.status);
+    const j = await r.json();
+    return (j[0] || []).map((p) => p[0]).join('');
+  }
+  async function mymemory(text, dst) {
+    const url = 'https://api.mymemory.translated.net/get?langpair=' + srcCode() + '|' + encodeURIComponent(dst)
+      + '&q=' + encodeURIComponent(text.slice(0, 480));
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('MyMemory ' + r.status);
+    const j = await r.json();
+    if (j.responseStatus !== 200 && j.responseStatus !== '200') throw new Error(j.responseDetails || 'MyMemory 错误');
+    return j.responseData.translatedText;
+  }
+
+  const LANG_NAMES = { en: 'English', th: 'Thai', ja: 'Japanese', ko: 'Korean', vi: 'Vietnamese',
+    ms: 'Malay', id: 'Indonesian', fr: 'French', de: 'German', es: 'Spanish' };
+
+  // Streams a context-aware translation from the Claude Messages API; onText gets the text so far.
+  const inflight = new Set(); // AbortControllers of running Claude requests
+  async function claude(seg, onText) {
+    const text = seg.en;
+    if (!settings.key) throw new Error('请先在上方填写 Claude API Key');
+    const srcName = LANG_NAMES[srcCode()] || settings.src;
+    const dstName = settings.dst === 'zh-TW' ? 'Traditional Chinese (繁體中文)' : 'Simplified Chinese (简体中文)';
+    let system = `You are a professional live interpreter. Each user message contains one new segment of a live speech-recognition transcript in ${srcName}. Translate it into natural, fluent ${dstName}, the way a skilled human interpreter would say it. Speech recognition sometimes mishears words or splits sentences oddly; use the recent context to infer what the speaker meant. Reply with only the translation of the new segment - no quotes, notes, or original text.`;
+    if (settings.ctx) system += `\n\nBackground and terminology from the listener:\n${settings.ctx}`;
+    // Earlier segments still being translated are included as source text only.
+    const prev = segments.slice(0, segments.indexOf(seg)).slice(-3)
+      .map((s) => (s.zh ? `${s.en}\n=> ${s.zh}` : s.en)).join('\n\n');
+    const content = (prev ? `Recent context:\n${prev}\n\n` : '') + `New segment to translate:\n${text}`;
+
+    const body = {
+      model: settings.model, max_tokens: 2048, stream: true,
+      output_config: { effort: 'low' },
+      system, messages: [{ role: 'user', content }]
+    };
+    const headers = {
+      'content-type': 'application/json',
+      'x-api-key': settings.key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    };
+    // Server-side fallback if a safety classifier declines (not offered for Haiku).
+    if (settings.model !== 'claude-haiku-5-5') {
+      body.fallbacks = 'default';
+      headers['anthropic-beta'] = 'server-side-fallback-2026-07-01';
+    }
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 25000);
+    inflight.add(ctl);
+    let reader;
+    try {
+      const r = await fetch('https://api.anthropic.com/v1/messages',
+        { method: 'POST', headers, body: JSON.stringify(body), signal: ctl.signal });
+      if (!r.ok) {
+        let detail = '';
+        try { detail = (await r.json()).error.message || ''; } catch {}
+        const label = { 401: 'API Key 无效', 403: '没有权限', 429: '超出速率或额度限制', 529: '服务繁忙' }[r.status] || 'HTTP ' + r.status;
+        throw new Error('Claude ' + label + (detail ? '：' + detail : ''));
+      }
+      reader = r.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '', out = '', stop = null;
+      const handle = (chunk) => {
+        for (const line of chunk.split('\n')) {
+          if (!line.startsWith('data:')) continue;
+          let ev;
+          try { ev = JSON.parse(line.slice(5)); } catch { continue; }
+          // On a mid-stream server-side fallback the partial text is kept and the fallback model continues it.
+          if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
+            out += ev.delta.text;
+            onText(out);
+          } else if (ev.type === 'message_delta' && ev.delta?.stop_reason) {
+            stop = ev.delta.stop_reason;
+          } else if (ev.type === 'error') {
+            throw new Error('Claude：' + (ev.error?.message || '服务错误'));
+          }
+        }
+      };
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n\n')) >= 0) {
+          handle(buf.slice(0, i));
+          buf = buf.slice(i + 2);
+        }
+      }
+      handle(buf + dec.decode());
+      if (stop === 'refusal') throw new Error('Claude 未翻译这一句');
+      return out.trim();
+    } catch (e) {
+      if (e.name === 'AbortError') throw new Error('Claude 响应超时');
+      throw e;
+    } finally {
+      clearTimeout(timer);
+      inflight.delete(ctl);
+      try { reader && (await reader.cancel()); } catch {}
+    }
+  }
+
+  // ---------- transcript UI ----------
+  const segments = []; // {time, en, zh}
+  let liveEl = null, liveText = '', liveTimer = null, liveReq = 0;
+
+  function fmtTime(d) { return d.toTimeString().slice(0, 8); }
+  function nearBottom() { return list.scrollHeight - list.scrollTop - list.clientHeight < 120; }
+  function scrollDown(force) { if (force || nearBottom()) list.scrollTop = list.scrollHeight; }
+  function makeSeg(cls) {
+    $('empty')?.remove();
+    const el = document.createElement('div');
+    el.className = 'seg' + (cls ? ' ' + cls : '');
+    el.innerHTML = '<div class="zh"></div><div class="en"></div><div class="t"></div>';
+    return el;
+  }
+
+  function showLive(text) {
+    const stick = nearBottom();
+    if (!liveEl) { liveEl = makeSeg('live'); list.appendChild(liveEl); }
+    liveEl.querySelector('.en').textContent = text;
+    liveText = text;
+    // Throttled preview translation of the still-changing sentence.
+    if (!liveTimer) {
+      liveTimer = setTimeout(async () => {
+        liveTimer = null;
+        const id = ++liveReq, t = liveText;
+        try {
+          const zh = await translate(t);
+          if (id === liveReq && liveEl) liveEl.querySelector('.zh').textContent = zh;
+        } catch {}
+      }, 600);
+    }
+    scrollDown(stick);
+  }
+
+  async function commit(text) {
+    text = text.trim();
+    if (!text) return;
+    const stick = nearBottom();
+    liveReq++;
+    let el = liveEl;
+    liveEl = null;
+    if (!el) { el = makeSeg(); list.appendChild(el); }
+    el.classList.remove('live');
+    const seg = { time: new Date(), en: text, zh: '' };
+    segments.push(seg);
+    el.querySelector('.en').textContent = text;
+    el.querySelector('.t').textContent = fmtTime(seg.time);
+    scrollDown(stick);
+    const zhEl = el.querySelector('.zh');
+    // Only the newest segment reports status, so a slow older request can't hide a newer error.
+    const report = (msg, isErr) => { if (segments[segments.length - 1] === seg) setStatus(msg, isErr); };
+    let note = '';
+    if (settings.engine === 'claude') {
+      try {
+        seg.zh = await claude(seg, (partial) => { zhEl.textContent = partial; scrollDown(stick); });
+        zhEl.textContent = seg.zh;
+        report(running ? '正在聆听…' : '');
+        scrollDown(stick);
+        return;
+      } catch (e) {
+        if (!segments.includes(seg)) return; // transcript was cleared
+        note = e.message + '（这句已改用 Google 翻译）';
+      }
+    }
+    try {
+      seg.zh = await translate(text);
+      zhEl.textContent = seg.zh;
+      report(note || (running ? '正在聆听…' : ''), !!note);
+    } catch (e) {
+      zhEl.textContent = '（翻译失败）';
+      report('翻译服务连接失败：' + e.message + '。可在顶部切换翻译引擎。', true);
+    }
+    scrollDown(stick);
+  }
+
+  // ---------- speech recognition ----------
+  let rec = null, wakeLock = null, restartTimer = null, capture = null, audioTrack = null;
+  const recStart = (r) => { try { audioTrack ? r.start(audioTrack) : r.start(); } catch {} };
+
+  // Asks the user to share a tab/screen with audio; returns false if they cancel or share no audio.
+  async function startCapture() {
+    try {
+      capture = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: 1 },
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        systemAudio: 'include'
+      });
+    } catch {
+      setStatus('已取消共享。', true);
+      return false;
+    }
+    audioTrack = capture.getAudioTracks()[0] || null;
+    if (!audioTrack) {
+      stopCapture();
+      setStatus('没有共享到声音。请重新开始，共享时勾选「共享标签页音频」或「共享系统音频」。', true);
+      return false;
+    }
+    audioTrack.onended = () => { if (running) stop(); };
+    return true;
+  }
+  function stopCapture() {
+    capture?.getTracks().forEach((t) => t.stop());
+    capture = null; audioTrack = null;
+  }
+
+  function buildRec() {
+    const r = new SR();
+    r.lang = settings.src;
+    r.continuous = true;
+    r.interimResults = true;
+    r.maxAlternatives = 1;
+    r.onresult = (ev) => {
+      let interim = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const res = ev.results[i];
+        if (res.isFinal) commit(res[0].transcript);
+        else interim += res[0].transcript;
+      }
+      if (interim.trim()) showLive(interim.trim());
+    };
+    r.onerror = (ev) => {
+      if (ev.error === 'no-speech' || ev.error === 'aborted') return;
+      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+        setStatus('麦克风权限被拒绝。请在浏览器地址栏里允许麦克风后重试。', true);
+        stop();
+      } else if (ev.error === 'network') {
+        setStatus('语音识别需要联网（浏览器的语音服务连接失败），正在重试…', true);
+      } else {
+        setStatus('语音识别错误：' + ev.error, true);
+      }
+    };
+    // Browsers end recognition after silence or ~60s; restart while the user wants it on.
+    r.onend = () => {
+      if (liveEl && liveText) commit(liveText);
+      liveText = '';
+      if (running && r === rec) { clearTimeout(restartTimer); restartTimer = setTimeout(() => recStart(r), 250); }
+    };
+    return r;
+  }
+
+  async function start() {
+    if (!SR) {
+      setStatus('当前浏览器不支持语音识别。请用 Chrome / Edge（电脑、安卓）或 Safari（iPhone）打开。', true);
+      return;
+    }
+    if (settings.source === 'system' && !(await startCapture())) return;
+    running = true;
+    rec = buildRec();
+    recStart(rec);
+    micBtn.classList.add('on'); micLabel.textContent = '停止'; applyEngine();
+    setStatus(audioTrack ? '正在聆听电脑声音…' : '正在聆听…');
+    try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
+  }
+  function stop() {
+    running = false;
+    clearTimeout(restartTimer);
+    try { rec && rec.stop(); } catch {}
+    stopCapture();
+    micBtn.classList.remove('on'); micLabel.textContent = '开始翻译'; applyEngine();
+    if (!statusEl.classList.contains('err')) setStatus('已停止');
+    try { wakeLock && wakeLock.release(); } catch {}
+    wakeLock = null;
+  }
+  function restart() { try { rec && rec.abort(); } catch {} rec = buildRec(); recStart(rec); }
+
+  micBtn.onclick = () => (running ? stop() : start());
+  document.addEventListener('visibilitychange', async () => {
+    if (running && document.visibilityState === 'visible' && !wakeLock) {
+      try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
+    }
+  });
+
+  $('clear').onclick = () => {
+    if (segments.length && !confirm('清空所有记录？')) return;
+    inflight.forEach((c) => c.abort());
+    segments.length = 0; list.innerHTML = ''; liveEl = null;
+  };
+  $('export').onclick = () => {
+    if (!segments.length) { setStatus('还没有内容可以导出'); return; }
+    const body = segments.map((s) => `[${fmtTime(s.time)}]\n${s.en}\n${s.zh}\n`).join('\n');
+    const blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '会议记录-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.txt';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+
+  if (!SR) setStatus('当前浏览器不支持语音识别。请用 Chrome / Edge（电脑、安卓）或 Safari（iPhone）打开。', true);
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
