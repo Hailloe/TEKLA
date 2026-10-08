@@ -1,0 +1,36 @@
+name: desktop-subtitles
+on:
+  push:
+    paths: ['desktop-subtitles/**', 'meeting-translator/**', '.github/workflows/desktop-subtitles.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop-subtitles
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop-subtitles/package-lock.json
+      - run: npm ci
+      - run: npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LiveSubtitles-windows
+          path: desktop-subtitles/dist/*.exe
+      # On the default branch, publish the installers on the repo's Releases page.
+      - if: github.ref_name == github.event.repository.default_branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "desktop-${{ github.run_number }}" dist/*.exe \
+            --title "实时翻译字幕（桌面版）build ${{ github.run_number }}" \
+            --notes "下载 LiveSubtitles-Setup-*.exe 安装，或 LiveSubtitles-*-portable.exe 免安装直接运行。使用说明见 desktop-subtitles/README.md。" \
+            --target "${{ github.sha }}"
