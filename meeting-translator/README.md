@@ -9,6 +9,27 @@
 - 一键导出 `.txt` 记录
 - 可以“添加到主屏幕”，像 App 一样打开
 
+## AI 翻译（Claude）
+
+顶部翻译引擎选 **Claude AI 翻译**，填入自己的 Claude API Key（在 [Anthropic Console](https://console.anthropic.com/settings/keys) 申请）。
+
+- 会结合前几句的上下文翻译，口语、专业词、语音识别听错的词都翻得更自然
+- 可以填“会议主题 / 专有名词”，例如 `钢结构项目周会；Tekla、BIM、RFI`，AI 会照着翻
+- 模型：Opus 5.5（最准）/ Sonnet 5.5（较快）/ Haiku 5.5（最快最省）
+- Key 只保存在本机浏览器，只发给 `api.anthropic.com`；按用量计费
+- Claude 出错（Key 不对、没额度、网络）时这一句会自动改用 Google 翻译
+
+### 延迟
+
+| 阶段 | 大约 |
+|---|---|
+| 说话中的灰色预览（Google） | 0.5–1 秒 |
+| 一句话说完 → 语音识别确定这一句 | 0.5–1.5 秒 |
+| Claude 开始出字（逐字显示） | Haiku 约 0.5–1 秒，Sonnet 约 1–2 秒，Opus 约 1.5–3 秒 |
+
+Claude 的结果出来之前，屏幕上会先保留 Google 的预览，所以看起来几乎没有空白等待。
+追求最低延迟选 Haiku 5.5；追求翻译质量选 Opus 5.5。
+
 ## 怎么用
 
 1. 用浏览器打开网址（需要 **https**，否则浏览器不给麦克风权限）
