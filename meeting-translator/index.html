@@ -4,214 +4,331 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>实时翻译</title>
-<meta name="theme-color" content="#111418">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
 <style>
+  /* Apple-style business look: grouped background, white rounded cards, system blue. */
   :root {
-    --bg: #f6f7f9; --panel: #ffffff; --text: #16191d; --muted: #6b7280;
-    --line: #e3e6ea; --accent: #2563eb; --accent-text: #fff; --danger: #dc2626;
-    --zh: #0f172a; --en: #4b5563; --live: #9ca3af;
+    --bg: #f2f2f7; --card: #ffffff; --text: #1d1d1f; --muted: #6e6e73; --faint: #aeaeb2;
+    --sep: rgba(60, 60, 67, .14); --fill: rgba(118, 118, 128, .12); --fill-strong: rgba(118, 118, 128, .2);
+    --accent: #007aff; --accent-tint: rgba(0, 122, 255, .08); --danger: #ff3b30; --green: #34c759;
+    --zh: #1d1d1f; --en: #6e6e73; --live: #aeaeb2;
+    --bar: rgba(255, 255, 255, .72);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 6px 20px rgba(0, 0, 0, .05);
     --fs: 22px;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #111418; --panel: #1a1f25; --text: #e7eaee; --muted: #9aa3ad;
-      --line: #2a3139; --accent: #3b82f6; --zh: #f3f5f7; --en: #a8b1bb; --live: #6b7480;
+      --bg: #000000; --card: #1c1c1e; --text: #f5f5f7; --muted: #98989d; --faint: #636366;
+      --sep: rgba(84, 84, 88, .55); --fill: rgba(118, 118, 128, .24); --fill-strong: rgba(118, 118, 128, .36);
+      --accent: #0a84ff; --accent-tint: rgba(10, 132, 255, .16); --danger: #ff453a;
+      --zh: #f5f5f7; --en: #98989d; --live: #636366;
+      --bar: rgba(28, 28, 30, .72); --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .25);
     }
   }
   :root[data-theme="dark"] {
-    --bg: #111418; --panel: #1a1f25; --text: #e7eaee; --muted: #9aa3ad;
-    --line: #2a3139; --accent: #3b82f6; --zh: #f3f5f7; --en: #a8b1bb; --live: #6b7480;
+    --bg: #000000; --card: #1c1c1e; --text: #f5f5f7; --muted: #98989d; --faint: #636366;
+    --sep: rgba(84, 84, 88, .55); --fill: rgba(118, 118, 128, .24); --fill-strong: rgba(118, 118, 128, .36);
+    --accent: #0a84ff; --accent-tint: rgba(10, 132, 255, .16); --danger: #ff453a;
+    --zh: #f5f5f7; --en: #98989d; --live: #636366;
+    --bar: rgba(28, 28, 30, .72); --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .25);
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
     background: var(--bg); color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
     display: flex; flex-direction: column;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
-  header {
-    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-    padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+  [hidden], [data-hidden] { display: none !important; }
+  button, select, input { font: inherit; color: inherit; }
+  button { cursor: pointer; border: none; background: none; -webkit-tap-highlight-color: transparent; }
+  button:disabled { opacity: .45; cursor: default; }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--accent-tint); outline-offset: 1px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .92em; background: var(--fill); padding: 1px 5px; border-radius: 5px; }
+
+  /* Top bar: frosted glass */
+  .topbar {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; align-items: center; gap: 12px; padding: 10px 20px;
+    background: var(--bar); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: .5px solid var(--sep);
   }
-  header h1 { font-size: 16px; margin: 0 auto 0 0; font-weight: 600; }
-  select, button {
-    font: inherit; font-size: 14px; color: var(--text); background: var(--panel);
-    border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
+  .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; min-width: 0; }
+  .brand img { width: 32px; height: 32px; border-radius: 8px; flex: none; }
+  .brand h1 { font-size: 17px; font-weight: 600; letter-spacing: -.02em; margin: 0; line-height: 1.2; }
+  .brand .sub { display: block; font-size: 12px; color: var(--muted); }
+  .pill {
+    height: 32px; padding: 0 14px; border-radius: 999px; background: var(--fill);
+    font-size: 13px; font-weight: 600; color: var(--text);
   }
-  button { cursor: pointer; }
-  button:disabled { opacity: .5; cursor: default; }
-  dialog#settings {
-    width: min(600px, calc(100% - 24px)); max-height: calc(100% - 24px); padding: 0;
-    border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text);
+  .pill:hover { background: var(--fill-strong); }
+  .icon-btn {
+    width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--fill); color: var(--text);
   }
-  dialog#settings::backdrop { background: rgba(0, 0, 0, .45); }
-  .ai { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 14px 16px; }
-  .ai h2 { grid-column: 1 / -1; margin: 0; font-size: 17px; }
-  .ai h3 { grid-column: 1 / -1; margin: 10px 0 0; font-size: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
-  .ai .done { grid-column: 1 / -1; justify-self: end; margin-top: 6px; background: var(--accent); color: var(--accent-text); border: none; padding: 8px 20px; }
-  .ai label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
-  .ai input, .ai select { font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 100%; }
-  .ai .wide { grid-column: 1 / -1; }
-  .ai [data-hidden] { display: none; }
-  .ai .note { grid-column: 1 / -1; font-size: 12px; color: var(--muted); line-height: 1.5; }
-  .ai a { color: var(--accent); }
-  .statusbar { display: flex; align-items: center; gap: 8px; padding: 6px 16px; min-height: 28px; }
+  .icon-btn:hover { background: var(--fill-strong); }
+  .icon-btn svg { width: 18px; height: 18px; }
+
+  /* Controls card */
+  .controls {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;
+    margin: 14px 20px 0; padding: 14px 16px; background: var(--card); border-radius: 18px; box-shadow: var(--shadow);
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field > span { font-size: 12px; font-weight: 500; color: var(--muted); padding-left: 4px; }
+  .select { position: relative; }
+  .select::after {
+    content: ""; position: absolute; right: 13px; top: 50%; width: 7px; height: 7px; pointer-events: none;
+    border-right: 1.6px solid var(--muted); border-bottom: 1.6px solid var(--muted); transform: translateY(-70%) rotate(45deg);
+  }
+  .select select {
+    appearance: none; -webkit-appearance: none; width: 100%;
+    padding: 9px 32px 9px 12px; border: none; border-radius: 10px; background: var(--fill);
+    font-size: 15px; color: var(--text); cursor: pointer;
+  }
+
+  /* Status + tools row */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 20px 4px; }
+  .status-pill {
+    display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 6px 14px; margin-right: auto;
+    background: var(--card); border-radius: 999px; box-shadow: var(--shadow); max-width: 100%;
+  }
+  .status-pill:has(#status:empty):has(#meter[hidden]) { visibility: hidden; }
   #status { font-size: 13px; color: var(--muted); }
-  #meter { flex: none; width: 56px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
-  #meter[hidden] { display: none; }
-  #meter i { display: block; height: 100%; width: 0; background: #16a34a; transition: width .1s; }
   #status.err { color: var(--danger); }
-  main { flex: 1; overflow-y: auto; padding: 8px 16px 24px; scroll-behavior: smooth; }
-  .seg { padding: 10px 0; border-bottom: 1px solid var(--line); }
-  .seg .zh { font-size: var(--fs); line-height: 1.45; color: var(--zh); font-weight: 500; }
-  .seg .en { font-size: calc(var(--fs) * .68); line-height: 1.4; color: var(--en); margin-top: 4px; }
-  .seg.me { border-left: 3px solid var(--accent); padding-left: 10px; }
-  .seg .t { font-size: 11px; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  #meter { flex: none; width: 48px; height: 6px; border-radius: 3px; background: var(--fill); overflow: hidden; }
+  #meter i { display: block; height: 100%; width: 0; background: var(--green); border-radius: 3px; transition: width .1s; }
+  .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .segmented { display: inline-flex; padding: 2px; border-radius: 999px; background: var(--fill); }
+  .segmented button { height: 28px; min-width: 40px; padding: 0 12px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+  .segmented button:hover { background: var(--card); box-shadow: var(--shadow); }
+  .chip {
+    height: 32px; padding: 0 14px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow);
+    font-size: 13px; font-weight: 500; color: var(--text);
+  }
+  .chip:hover { color: var(--accent); }
+  .chip.active { background: var(--accent); color: #fff; }
+
+  /* Transcript */
+  main { flex: 1; overflow-y: auto; padding: 8px 20px 16px; scroll-behavior: smooth; }
+  .seg {
+    background: var(--card); border-radius: 16px; box-shadow: var(--shadow);
+    padding: 14px 18px; margin: 0 auto 10px; max-width: 980px;
+  }
+  .seg .zh { font-size: var(--fs); line-height: 1.45; color: var(--zh); font-weight: 600; letter-spacing: -.01em; }
+  .seg .en { font-size: calc(var(--fs) * .66); line-height: 1.45; color: var(--en); margin-top: 4px; }
+  .seg .en:empty { display: none; }
+  .seg .t { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--faint); margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .seg .t .who { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--fill); color: var(--muted); }
+  .seg.me { background: var(--accent-tint); box-shadow: none; }
+  .seg.me .t .who { background: var(--accent); color: #fff; }
+  .seg.live { background: transparent; box-shadow: inset 0 0 0 1px var(--sep); }
   .seg.live .zh, .seg.live .en { color: var(--live); }
   body.hide-en .seg .en { display: none; }
-  .empty { color: var(--muted); text-align: center; margin-top: 18vh; line-height: 1.8; font-size: 15px; }
-  footer {
-    display: flex; gap: 10px; align-items: center; justify-content: center;
-    padding: 12px 16px; border-top: 1px solid var(--line); background: var(--panel);
+  .empty {
+    max-width: 560px; margin: 8vh auto 0; padding: 28px 30px; text-align: center;
+    background: var(--card); border-radius: 20px; box-shadow: var(--shadow);
+    color: var(--muted); line-height: 1.8; font-size: 15px;
   }
+  .empty b { color: var(--text); font-weight: 600; }
+
+  /* Bottom dock */
+  .dock {
+    display: flex; align-items: center; gap: 6px; align-self: center;
+    margin: 6px 16px 16px; padding: 6px; border-radius: 999px;
+    background: var(--bar); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 10px 30px rgba(0, 0, 0, .12);
+  }
+  .dock-btn { height: 44px; padding: 0 18px; border-radius: 999px; color: var(--accent); font-size: 15px; font-weight: 500; }
+  .dock-btn:hover { background: var(--fill); }
   #mic {
-    min-width: 160px; padding: 12px 22px; font-size: 17px; font-weight: 600;
-    background: var(--accent); color: var(--accent-text); border: none; border-radius: 999px;
+    height: 48px; min-width: 168px; padding: 0 26px; border-radius: 999px;
+    background: var(--accent); color: #fff; font-size: 16px; font-weight: 600; letter-spacing: -.01em;
+    box-shadow: 0 4px 14px rgba(0, 122, 255, .35);
   }
-  #mic.on { background: var(--danger); }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: middle; }
+  #mic.on { background: var(--danger); box-shadow: 0 4px 14px rgba(255, 59, 48, .35); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; margin-right: 8px; vertical-align: middle; }
   #mic.on .dot { animation: pulse 1s infinite; }
-  @keyframes pulse { 50% { opacity: .2; } }
-  .small { font-size: 13px; padding: 8px 12px; }
-  @media (max-width: 560px) {
-    header h1 { width: 100%; }
-    #mic { flex: 1; }
+  @keyframes pulse { 50% { opacity: .25; } }
+
+  /* Settings sheet: iOS grouped list */
+  dialog#settings {
+    width: min(580px, calc(100% - 24px)); max-height: calc(100% - 32px); padding: 0;
+    border: none; border-radius: 20px; background: var(--bg); color: var(--text);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, .3);
+  }
+  dialog#settings::backdrop { background: rgba(0, 0, 0, .32); backdrop-filter: blur(3px); }
+  .sheet { padding-bottom: 22px; }
+  .sheet-head {
+    position: sticky; top: 0; z-index: 1; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    padding: 14px 18px; background: var(--bar); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: .5px solid var(--sep);
+  }
+  .sheet-head h2 { grid-column: 2; margin: 0; font-size: 17px; font-weight: 600; }
+  .sheet-head .done { grid-column: 3; justify-self: end; color: var(--accent); font-size: 17px; font-weight: 600; padding: 4px 6px; border-radius: 8px; }
+  .group-title { font-size: 13px; color: var(--muted); padding: 22px 34px 7px; }
+  .group { margin: 0 18px; background: var(--card); border-radius: 12px; overflow: hidden; }
+  .row { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 6px 16px; }
+  .row + .row { border-top: .5px solid var(--sep); }
+  .row > span { flex: 0 0 auto; min-width: 96px; font-size: 15px; }
+  .row input, .row select {
+    flex: 1; min-width: 0; border: none; background: transparent; text-align: right;
+    font-size: 16px; color: var(--muted); padding: 6px 0;
+  }
+  .row input:focus { color: var(--text); outline: none; }
+  .row select { cursor: pointer; text-align-last: right; appearance: none; -webkit-appearance: none; padding-right: 18px;
+    background: linear-gradient(45deg, transparent 50%, var(--faint) 50%) right 6px center / 6px 6px no-repeat,
+                linear-gradient(-45deg, transparent 50%, var(--faint) 50%) right 0 center / 6px 6px no-repeat; }
+  .row.stack { flex-direction: column; align-items: stretch; gap: 4px; padding: 10px 16px; }
+  .row.stack input { text-align: left; color: var(--text); }
+  .foot { font-size: 12.5px; color: var(--muted); line-height: 1.55; padding: 8px 34px 0; margin: 0; }
+
+  @media (max-width: 600px) {
+    .topbar { padding: 8px 14px; }
+    .brand .sub { display: none; }
+    .controls { grid-template-columns: 1fr 1fr; margin: 10px 12px 0; padding: 12px; gap: 10px; }
+    .select select { font-size: 14px; padding: 9px 26px 9px 10px; }
+    .select::after { right: 11px; }
+    .toolbar { margin: 10px 12px 2px; }
+    .status-pill { order: 2; width: 100%; }
+    main { padding: 8px 12px 12px; }
+    .dock { align-self: stretch; margin: 6px 12px 12px; }
+    #mic { flex: 1; min-width: 0; }
   }
 </style>
 </head>
 <body>
-<header>
-  <h1>实时翻译</h1>
-  <select id="source" title="声音来源" hidden>
-    <option value="mic">🎤 麦克风</option>
-    <option value="system">💻 电脑声音（Teams / 视频）</option>
-    <option value="both">💻+🎤 电脑声音 + 我的麦克风</option>
-  </select>
-  <select id="srcLang" title="说话人语言">
-    <option value="en-US">英语 (美)</option>
-    <option value="en-GB">英语 (英)</option>
-    <option value="en-AU">英语 (澳)</option>
-    <option value="en-IN">英语 (印)</option>
-    <option value="en-SG">英语 (新加坡)</option>
-    <option value="th-TH">泰语</option>
-    <option value="ja-JP">日语</option>
-    <option value="ko-KR">韩语</option>
-    <option value="vi-VN">越南语</option>
-    <option value="ms-MY">马来语</option>
-    <option value="id-ID">印尼语</option>
-    <option value="fr-FR">法语</option>
-    <option value="de-DE">德语</option>
-    <option value="es-ES">西班牙语</option>
-  </select>
-  <span aria-hidden="true">→</span>
-  <select id="dstLang" title="翻译成">
-    <option value="zh-CN">简体中文</option>
-    <option value="zh-TW">繁體中文</option>
-  </select>
-  <select id="engine" title="翻译引擎">
-    <option value="claude">Claude AI 翻译</option>
-    <option value="openai">DeepSeek / 其他 AI</option>
-    <option value="google">Google 翻译</option>
-    <option value="mymemory">MyMemory</option>
-  </select>
-  <button id="fsDown" title="缩小字体">A−</button>
-  <button id="fsUp" title="放大字体">A+</button>
-  <button id="toggleEn" title="显示/隐藏原文">原文</button>
-  <button id="pip" title="打开一个置顶的悬浮字幕小窗，可以放在视频或 Teams 旁边" hidden>小窗</button>
-  <button id="ovl" title="显示/隐藏桌面字幕层（Ctrl+Shift+H）" hidden>字幕层</button>
-  <button id="ovlLock" title="锁定后鼠标可以点穿字幕；解锁后可以拖动、调大小（Ctrl+Shift+L）" hidden>🔒 已锁定</button>
-  <button id="settingsBtn" title="设置 API Key、AI 语音识别、会议专有名词">⚙️ 设置</button>
+<header class="topbar">
+  <div class="brand">
+    <img src="icon.svg" alt="">
+    <div><h1 data-i18n="appName">实时翻译</h1><span class="sub" data-i18n="appSub"></span></div>
+  </div>
+  <button id="langBtn" class="pill" title="Language / 界面语言">EN</button>
+  <button id="settingsBtn" class="icon-btn" data-i18n-title="tipSettings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+  </button>
 </header>
+
+<section class="controls">
+  <label class="field" id="sourceField" hidden><span data-i18n="lblSource"></span>
+    <div class="select"><select id="source">
+      <option value="mic" data-i18n="srcMic"></option>
+      <option value="system" data-i18n="srcSystem"></option>
+      <option value="both" data-i18n="srcBoth"></option>
+    </select></div>
+  </label>
+  <label class="field"><span data-i18n="lblFrom"></span>
+    <div class="select"><select id="srcLang">
+      <option value="en-US" data-i18n="l_en-US"></option>
+      <option value="en-GB" data-i18n="l_en-GB"></option>
+      <option value="en-AU" data-i18n="l_en-AU"></option>
+      <option value="en-IN" data-i18n="l_en-IN"></option>
+      <option value="en-SG" data-i18n="l_en-SG"></option>
+      <option value="th-TH" data-i18n="l_th-TH"></option>
+      <option value="ja-JP" data-i18n="l_ja-JP"></option>
+      <option value="ko-KR" data-i18n="l_ko-KR"></option>
+      <option value="vi-VN" data-i18n="l_vi-VN"></option>
+      <option value="ms-MY" data-i18n="l_ms-MY"></option>
+      <option value="id-ID" data-i18n="l_id-ID"></option>
+      <option value="fr-FR" data-i18n="l_fr-FR"></option>
+      <option value="de-DE" data-i18n="l_de-DE"></option>
+      <option value="es-ES" data-i18n="l_es-ES"></option>
+    </select></div>
+  </label>
+  <label class="field"><span data-i18n="lblTo"></span>
+    <div class="select"><select id="dstLang">
+      <option value="zh-CN" data-i18n="l_zh-CN"></option>
+      <option value="zh-TW" data-i18n="l_zh-TW"></option>
+    </select></div>
+  </label>
+  <label class="field"><span data-i18n="lblEngine"></span>
+    <div class="select"><select id="engine">
+      <option value="claude" data-i18n="engClaude"></option>
+      <option value="openai" data-i18n="engOpenai"></option>
+      <option value="google" data-i18n="engGoogle"></option>
+      <option value="mymemory">MyMemory</option>
+    </select></div>
+  </label>
+</section>
+
+<div class="toolbar">
+  <div class="status-pill"><div id="meter" hidden data-i18n-title="tipMeter"><i></i></div><div id="status"></div></div>
+  <div class="tools">
+    <div class="segmented">
+      <button id="fsDown" data-i18n-title="tipFsDown">A−</button>
+      <button id="fsUp" data-i18n-title="tipFsUp">A+</button>
+    </div>
+    <button id="toggleEn" class="chip" data-i18n="btnOriginal" data-i18n-title="tipOriginal"></button>
+    <button id="pip" class="chip" data-i18n="btnPip" data-i18n-title="tipPip" hidden></button>
+    <button id="ovl" class="chip" data-i18n-title="tipOvl" hidden></button>
+    <button id="ovlLock" class="chip" data-i18n-title="tipOvlLock" hidden></button>
+  </div>
+</div>
+
 <dialog id="settings">
-<form method="dialog" class="ai">
-  <h2>⚙️ 设置</h2>
-  <div class="note">所有 API Key 只保存在这台设备的浏览器里，只发送给对应的服务。换电脑或清除浏览器数据后需要重新填写。</div>
+<form method="dialog" class="sheet">
+  <div class="sheet-head"><h2 data-i18n="setTitle"></h2><button class="done" value="ok" data-i18n="done"></button></div>
+  <p class="foot" style="padding-top:14px" data-i18n="setPrivacy"></p>
 
-  <h3>AI 翻译 · Claude（顶部翻译引擎选「Claude AI 翻译」时使用）</h3>
-  <label>Claude API Key
-    <input id="aiKey" type="password" autocomplete="off" placeholder="sk-ant-...">
-  </label>
-  <label>模型
-    <select id="aiModel">
-      <option value="claude-opus-5-5">Opus 5.5（最准）</option>
-      <option value="claude-sonnet-5-5">Sonnet 5.5（较快）</option>
-      <option value="claude-haiku-5-5">Haiku 5.5（最快最省）</option>
-    </select>
-  </label>
-  <div class="note">在 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a> 申请 Key。</div>
+  <div class="group-title">Claude</div>
+  <div class="group">
+    <label class="row"><span>API Key</span><input id="aiKey" type="password" autocomplete="off" placeholder="sk-ant-..."></label>
+    <label class="row"><span data-i18n="model"></span>
+      <select id="aiModel">
+        <option value="claude-opus-5-5" data-i18n="mOpus"></option>
+        <option value="claude-sonnet-5-5" data-i18n="mSonnet"></option>
+        <option value="claude-haiku-5-5" data-i18n="mHaiku"></option>
+      </select>
+    </label>
+  </div>
+  <p class="foot" data-i18n-html="noteClaude"></p>
 
-  <h3>AI 翻译 · DeepSeek / 其他 AI（顶部选「DeepSeek / 其他 AI」时使用）</h3>
-  <label>API Key
-    <input id="oaiKey" type="password" autocomplete="off" placeholder="sk-...">
-  </label>
-  <label>模型
-    <input id="oaiModel" type="text" autocomplete="off" spellcheck="false">
-  </label>
-  <label class="wide">接口地址（OpenAI 兼容）
-    <input id="oaiBase" type="url" autocomplete="off" spellcheck="false">
-  </label>
-  <div class="note">
-    默认是 DeepSeek（在 <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">platform.deepseek.com</a> 申请 Key）。
-    通义千问、Kimi 等支持 OpenAI 接口格式的 AI，改成它们的接口地址和模型名即可。
+  <div class="group-title" data-i18n="grpOai"></div>
+  <div class="group">
+    <label class="row"><span>API Key</span><input id="oaiKey" type="password" autocomplete="off" placeholder="sk-..."></label>
+    <label class="row"><span data-i18n="model"></span><input id="oaiModel" type="text" autocomplete="off" spellcheck="false"></label>
+    <label class="row stack"><span data-i18n="baseUrl"></span><input id="oaiBase" type="url" autocomplete="off" spellcheck="false"></label>
+  </div>
+  <p class="foot" data-i18n-html="noteOai"></p>
+
+  <div class="group-title" data-i18n="grpCtx"></div>
+  <div class="group">
+    <label class="row stack"><span data-i18n="ctxLabel"></span><input id="aiCtx" type="text" data-i18n-ph="ctxPh"></label>
   </div>
 
-  <label class="wide">会议主题 / 专有名词（可选，让 AI 翻得更准）
-    <input id="aiCtx" type="text" placeholder="例如：钢结构项目周会；Tekla、BIM、shop drawing、RFI">
-  </label>
-
-  <h3>语音识别（把声音变成文字）</h3>
-  <label class="wide">识别方式
-    <select id="stt">
-      <option value="browser">浏览器自带（免费；Chrome 需要能连 Google）</option>
-      <option value="ai">AI 识别（Whisper / SenseVoice，更准，按用量付费）</option>
-    </select>
-  </label>
-  <label data-stt="ai">API Key
-    <input id="sttKey" type="password" autocomplete="off" placeholder="sk-...">
-  </label>
-  <label data-stt="ai">模型
-    <input id="sttModel" type="text" autocomplete="off" spellcheck="false">
-  </label>
-  <label class="wide" data-stt="ai">接口地址（OpenAI 兼容的 /audio/transcriptions）
-    <input id="sttBase" type="url" autocomplete="off" spellcheck="false">
-  </label>
-  <div class="note" data-stt="ai">
-    默认是国内的硅基流动 SenseVoice（在 <a href="https://cloud.siliconflow.cn/account/ak" target="_blank" rel="noopener">cloud.siliconflow.cn</a> 申请 Key），不需要连 Google。
-    也可以用 OpenAI：接口地址 <code>https://api.openai.com/v1</code>，模型 <code>whisper-1</code>。
-    AI 识别是一句话说完后整句识别，比浏览器自带的慢 1–3 秒，但口音、专业词更准；同时听「我 + 对方」时能分清是谁说的，也能识别你说的中文。
+  <div class="group-title" data-i18n="grpStt"></div>
+  <div class="group">
+    <label class="row"><span data-i18n="sttMethod"></span>
+      <select id="stt">
+        <option value="browser" data-i18n="sttBrowser"></option>
+        <option value="ai" data-i18n="sttAi"></option>
+      </select>
+    </label>
+    <label class="row" data-stt="ai"><span>API Key</span><input id="sttKey" type="password" autocomplete="off" placeholder="sk-..."></label>
+    <label class="row" data-stt="ai"><span data-i18n="model"></span><input id="sttModel" type="text" autocomplete="off" spellcheck="false"></label>
+    <label class="row stack" data-stt="ai"><span data-i18n="sttBaseLbl"></span><input id="sttBase" type="url" autocomplete="off" spellcheck="false"></label>
   </div>
-
-  <button class="done" value="ok">完成</button>
+  <p class="foot" data-stt="ai" data-i18n-html="noteStt"></p>
 </form>
 </dialog>
-<div class="statusbar"><div id="meter" hidden title="收到的音量"><i></i></div><div id="status"></div></div>
+
 <main id="list">
-  <div class="empty" id="empty">
-    点击下方 <b>开始翻译</b>，允许使用麦克风。<br>
-    开会、看电视、看视频都可以：把手机/电脑放在能听清声音的位置即可。<br>
-    推荐使用 Chrome / Edge（电脑、安卓）或 Safari（iPhone）。
-  </div>
+  <div class="empty" id="empty"></div>
 </main>
-<footer>
-  <button id="clear" class="small">清空</button>
-  <button id="mic"><span class="dot"></span><span id="micLabel">开始翻译</span></button>
-  <button id="export" class="small">导出</button>
+<footer class="dock">
+  <button id="clear" class="dock-btn" data-i18n="btnClear"></button>
+  <button id="mic"><span class="dot"></span><span id="micLabel"></span></button>
+  <button id="export" class="dock-btn" data-i18n="btnExport"></button>
 </footer>
 
 <script>
@@ -228,6 +345,129 @@
     get(k, d) { try { const v = localStorage.getItem('mt.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
     set(k, v) { try { localStorage.setItem('mt.' + k, JSON.stringify(v)); } catch {} }
   };
+  // ---------- interface language (中文 / English) ----------
+  const I18N = {
+    zh: {
+      appName: '实时翻译', appSub: '会议 · 视频 · 电视',
+      tipSettings: '设置：API Key、AI 语音识别、会议专有名词',
+      lblSource: '声音来源', srcMic: '🎤 麦克风', srcSystem: '💻 电脑声音（Teams / 视频）', srcBoth: '💻+🎤 电脑声音 + 我的麦克风',
+      lblFrom: '说话语言', lblTo: '翻译成', lblEngine: '翻译引擎',
+      'l_en-US': '英语（美）', 'l_en-GB': '英语（英）', 'l_en-AU': '英语（澳）', 'l_en-IN': '英语（印）', 'l_en-SG': '英语（新加坡）',
+      'l_th-TH': '泰语', 'l_ja-JP': '日语', 'l_ko-KR': '韩语', 'l_vi-VN': '越南语', 'l_ms-MY': '马来语', 'l_id-ID': '印尼语',
+      'l_fr-FR': '法语', 'l_de-DE': '德语', 'l_es-ES': '西班牙语', 'l_zh-CN': '简体中文', 'l_zh-TW': '繁體中文',
+      engClaude: 'Claude AI 翻译', engOpenai: 'DeepSeek / 其他 AI', engGoogle: 'Google 翻译',
+      tipMeter: '收到的音量', tipFsDown: '缩小字体', tipFsUp: '放大字体',
+      btnOriginal: '原文', tipOriginal: '显示 / 隐藏原文',
+      btnPip: '小窗', btnPipClose: '关闭小窗', tipPip: '打开置顶的悬浮字幕小窗，可以放在视频或 Teams 旁边',
+      ovlHide: '隐藏字幕层', ovlShow: '显示字幕层', ovlLocked: '🔒 已锁定', ovlUnlocked: '🔓 可拖动',
+      tipOvl: '显示 / 隐藏桌面字幕层（Ctrl+Shift+H）', tipOvlLock: '锁定后鼠标可以点穿字幕；解锁后可以拖动、调大小（Ctrl+Shift+L）',
+      btnClear: '清空', btnExport: '导出', micStart: '开始翻译', micStop: '停止',
+      setTitle: '设置', done: '完成',
+      setPrivacy: '所有 API Key 只保存在这台设备的浏览器里，只发送给对应的服务。换电脑或清除浏览器数据后需要重新填写。',
+      model: '模型', mOpus: 'Opus 5.5（最准）', mSonnet: 'Sonnet 5.5（较快）', mHaiku: 'Haiku 5.5（最快最省）',
+      noteClaude: '翻译引擎选「Claude AI 翻译」时使用。在 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a> 申请 Key。',
+      grpOai: 'DeepSeek / 其他 AI', baseUrl: '接口地址（OpenAI 兼容）',
+      noteOai: '翻译引擎选「DeepSeek / 其他 AI」时使用。默认是 DeepSeek（在 <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">platform.deepseek.com</a> 申请 Key）。通义千问、Kimi 等支持 OpenAI 接口格式的 AI，改成它们的接口地址和模型名即可。',
+      grpCtx: '会议', ctxLabel: '主题 / 专有名词（可选，让 AI 翻得更准）', ctxPh: '例如：钢结构项目周会；Tekla、BIM、RFI',
+      grpStt: '语音识别', sttMethod: '识别方式', sttBrowser: '浏览器自带（免费）', sttAi: 'AI 识别（更准）',
+      sttDesktopNA: '（桌面版不可用）', sttBaseLbl: '接口地址（/audio/transcriptions）',
+      noteStt: '默认是国内的硅基流动 SenseVoice（在 <a href="https://cloud.siliconflow.cn/account/ak" target="_blank" rel="noopener">cloud.siliconflow.cn</a> 申请 Key），不需要连 Google。也可以用 OpenAI：接口地址 <code>https://api.openai.com/v1</code>，模型 <code>whisper-1</code>。一句话说完后整句识别，比浏览器自带的慢 1–3 秒，但口音、专业词更准；同时听「我 + 对方」时能分清是谁说的。',
+      emptyWeb: '点击下方 <b>开始翻译</b>，允许使用麦克风。<br>开会、看电视、看视频都可以：把手机或电脑放在能听清声音的位置。<br>推荐 Chrome / Edge（电脑、安卓）或 Safari（iPhone）。',
+      emptySystem: '<br><br>💻 电脑上开 Teams / Zoom 会议：声音来源选 <b>电脑声音</b>，开始后选会议所在的窗口或「整个屏幕」，并打开 <b>共享音频</b>，戴耳机也能翻译。想把自己说的话也记下来，选 <b>电脑声音 + 我的麦克风</b>。',
+      emptyDesktop: '桌面字幕版：翻译会显示在一层透明字幕里，浮在所有程序上面。<br>1. 先点右上角 <b>设置</b>，填好 AI 语音识别的 Key<br>2. 声音来源选 <b>电脑声音</b>，或加上 <b>我的麦克风</b><br>3. 点 <b>开始翻译</b>。<b>Ctrl+Shift+L</b> 解锁字幕层后可拖动、调大小，<b>Ctrl+Shift+H</b> 隐藏 / 显示',
+      pipTitle: '实时翻译字幕', pipStart: '▶ 开始', pipStop: '■ 停止',
+      pipListening: '正在聆听…翻译会显示在这里', pipIdle: '点右上角「▶ 开始」，翻译会像字幕一样显示在这里',
+      who_me: '我', who_them: '对方',
+      listening: '正在聆听…', listeningSystem: '正在聆听电脑声音…', listeningBoth: '正在聆听电脑声音和我的麦克风…', aiPrefix: 'AI 识别：',
+      stopped: '已停止', heard: '听到说话了，正在识别…', recognizing: '识别中…', soundBack: '收到声音了，正在聆听…',
+      errPip: (m) => '无法打开小窗：' + m,
+      translateFail: '翻译失败', svcErr: '服务错误', sttName: 'AI 识别',
+      connFail: (n) => n + ' 连接失败（网络不通，或该服务不允许网页直接调用）',
+      timeout: (n) => n + ' 响应超时',
+      httpErr: (n, s, d) => n + ' ' + ({ 401: 'API Key 无效', 402: '余额不足', 403: '没有权限', 429: '超出速率或额度限制', 529: '服务繁忙' }[s] || 'HTTP ' + s) + (d ? '：' + d : ''),
+      needKey: (n) => '请先在「设置」里填写 ' + n + ' API Key',
+      refusal: 'Claude 未翻译这一句',
+      fellBack: (m) => m + '（这句已改用 Google 翻译）',
+      cellFail: '（翻译失败）',
+      translateConnFail: (m) => '翻译服务连接失败：' + m + '。可以换一个翻译引擎。',
+      srStartFail: (m, track) => '无法开始语音识别：' + m + (track ? '（电脑声音模式需要电脑版 Chrome / Edge 135 以上）' : ''),
+      quietSystem: '没有收到声音：请确认视频正在播放，并且共享时打开了「共享标签页音频 / 系统音频」。',
+      quietMic: '麦克风没有收到声音：戴耳机时请把声音来源改成「电脑声音」，或把外放音量调大。',
+      shareCancel: '已取消共享。',
+      noAudioShared: '没有共享到声音。请重新开始，共享时打开「共享标签页音频」或「共享系统音频」。',
+      audioCapture: '拿不到声音：找不到麦克风，或声音来源不可用。',
+      micDenied: '麦克风权限被拒绝。请在浏览器地址栏里允许麦克风后重试。',
+      srNetwork: '语音识别需要联网（浏览器的语音服务连接失败），正在重试…',
+      srError: (e) => '语音识别错误：' + e,
+      noSR: '当前浏览器不支持自带的语音识别。请用 Chrome / Edge 或 Safari 打开，或在「设置」里改用 AI 识别。',
+      needSttKey: '请先在「设置」里填写 AI 语音识别的 API Key。',
+      micUnavailable: '拿不到麦克风：请在浏览器地址栏里允许使用麦克风。',
+      confirmClear: '清空所有记录？', nothingToExport: '还没有内容可以导出', exportName: '会议记录'
+    },
+    en: {
+      appName: 'Live Translate', appSub: 'Meetings · Video · TV',
+      tipSettings: 'Settings: API keys, AI speech recognition, meeting terms',
+      lblSource: 'Audio source', srcMic: '🎤 Microphone', srcSystem: '💻 Computer audio (Teams / video)', srcBoth: '💻+🎤 Computer audio + my mic',
+      lblFrom: 'Spoken language', lblTo: 'Translate to', lblEngine: 'Translation engine',
+      'l_en-US': 'English (US)', 'l_en-GB': 'English (UK)', 'l_en-AU': 'English (Australia)', 'l_en-IN': 'English (India)', 'l_en-SG': 'English (Singapore)',
+      'l_th-TH': 'Thai', 'l_ja-JP': 'Japanese', 'l_ko-KR': 'Korean', 'l_vi-VN': 'Vietnamese', 'l_ms-MY': 'Malay', 'l_id-ID': 'Indonesian',
+      'l_fr-FR': 'French', 'l_de-DE': 'German', 'l_es-ES': 'Spanish', 'l_zh-CN': 'Simplified Chinese', 'l_zh-TW': 'Traditional Chinese',
+      engClaude: 'Claude AI', engOpenai: 'DeepSeek / other AI', engGoogle: 'Google Translate',
+      tipMeter: 'Input level', tipFsDown: 'Smaller text', tipFsUp: 'Larger text',
+      btnOriginal: 'Original', tipOriginal: 'Show / hide the original text',
+      btnPip: 'Float', btnPipClose: 'Close float', tipPip: 'Open an always-on-top subtitle window to place beside a video or Teams',
+      ovlHide: 'Hide overlay', ovlShow: 'Show overlay', ovlLocked: '🔒 Locked', ovlUnlocked: '🔓 Movable',
+      tipOvl: 'Show / hide the desktop subtitle overlay (Ctrl+Shift+H)', tipOvlLock: 'Locked: clicks pass through. Unlocked: drag and resize (Ctrl+Shift+L)',
+      btnClear: 'Clear', btnExport: 'Export', micStart: 'Start', micStop: 'Stop',
+      setTitle: 'Settings', done: 'Done',
+      setPrivacy: 'API keys are stored only in this browser on this device and are sent only to their own service. You will need to enter them again on another computer or after clearing browser data.',
+      model: 'Model', mOpus: 'Opus 5.5 (most accurate)', mSonnet: 'Sonnet 5.5 (faster)', mHaiku: 'Haiku 5.5 (fastest, cheapest)',
+      noteClaude: 'Used when the engine is "Claude AI". Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a>.',
+      grpOai: 'DeepSeek / other AI', baseUrl: 'Base URL (OpenAI-compatible)',
+      noteOai: 'Used when the engine is "DeepSeek / other AI". Defaults to DeepSeek (get a key at <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">platform.deepseek.com</a>). Any OpenAI-compatible AI such as Qwen or Kimi works: change the base URL and model.',
+      grpCtx: 'Meeting', ctxLabel: 'Topic & terms (optional, helps the AI)', ctxPh: 'e.g. steel structure weekly meeting; Tekla, BIM, RFI',
+      grpStt: 'Speech recognition', sttMethod: 'Method', sttBrowser: 'Built-in browser (free)', sttAi: 'AI recognition (more accurate)',
+      sttDesktopNA: ' (not in desktop app)', sttBaseLbl: 'Base URL (/audio/transcriptions)',
+      noteStt: 'Defaults to SiliconFlow SenseVoice (get a key at <a href="https://cloud.siliconflow.cn/account/ak" target="_blank" rel="noopener">cloud.siliconflow.cn</a>), no Google needed. OpenAI also works: base URL <code>https://api.openai.com/v1</code>, model <code>whisper-1</code>. Each sentence is recognized when it ends, 1–3 s slower than the built-in recognizer but better with accents and jargon; with "me + them" it tells the two sides apart.',
+      emptyWeb: 'Tap <b>Start</b> below and allow the microphone.<br>Works for meetings, TV and videos: place your phone or computer where it can hear clearly.<br>Best in Chrome / Edge (desktop, Android) or Safari (iPhone).',
+      emptySystem: '<br><br>💻 Teams / Zoom on this computer: set the audio source to <b>Computer audio</b>, then pick the meeting window or "Entire screen" and turn on <b>Share audio</b>; works with headphones. To record what you say too, choose <b>Computer audio + my mic</b>.',
+      emptyDesktop: 'Desktop subtitles: translations appear in a transparent layer above every program.<br>1. Open <b>Settings</b> (top right) and enter the AI speech recognition key<br>2. Set the audio source to <b>Computer audio</b>, optionally with <b>my mic</b><br>3. Press <b>Start</b>. <b>Ctrl+Shift+L</b> unlocks the overlay to move / resize it, <b>Ctrl+Shift+H</b> hides / shows it',
+      pipTitle: 'Live subtitles', pipStart: '▶ Start', pipStop: '■ Stop',
+      pipListening: 'Listening… translations will appear here', pipIdle: 'Press "▶ Start" (top right); translations appear here like subtitles',
+      who_me: 'Me', who_them: 'Them',
+      listening: 'Listening…', listeningSystem: 'Listening to computer audio…', listeningBoth: 'Listening to computer audio and my mic…', aiPrefix: 'AI: ',
+      stopped: 'Stopped', heard: 'Speech detected, recognizing…', recognizing: 'Recognizing…', soundBack: 'Sound detected, listening…',
+      errPip: (m) => "Can't open the floating window: " + m,
+      translateFail: 'Translation failed', svcErr: 'service error', sttName: 'AI recognition',
+      connFail: (n) => n + ": connection failed (network down, or the service doesn't allow calls from a web page)",
+      timeout: (n) => n + ': timed out',
+      httpErr: (n, s, d) => n + ': ' + ({ 401: 'invalid API key', 402: 'insufficient balance', 403: 'permission denied', 429: 'rate or quota limit exceeded', 529: 'service busy' }[s] || 'HTTP ' + s) + (d ? ' — ' + d : ''),
+      needKey: (n) => 'Enter your ' + n + ' API key in Settings first',
+      refusal: 'Claude declined this sentence',
+      fellBack: (m) => m + ' (this sentence used Google Translate)',
+      cellFail: '(translation failed)',
+      translateConnFail: (m) => 'Translation service unreachable: ' + m + '. Try another engine.',
+      srStartFail: (m, track) => "Can't start speech recognition: " + m + (track ? ' (computer audio needs desktop Chrome / Edge 135+)' : ''),
+      quietSystem: 'No sound: make sure the video is playing and "Share tab audio / system audio" was turned on.',
+      quietMic: 'The microphone hears nothing: with headphones, switch the source to "Computer audio", or turn the speakers up.',
+      shareCancel: 'Sharing cancelled.',
+      noAudioShared: 'No audio was shared. Start again and turn on "Share tab audio" or "Share system audio".',
+      audioCapture: 'No audio: no microphone found, or the audio source is unavailable.',
+      micDenied: 'Microphone permission denied. Allow it in the address bar and try again.',
+      srNetwork: "Speech recognition needs the internet (can't reach the browser's speech service), retrying…",
+      srError: (e) => 'Speech recognition error: ' + e,
+      noSR: "This browser has no built-in speech recognition. Use Chrome / Edge or Safari, or switch to AI recognition in Settings.",
+      needSttKey: 'Enter the AI speech recognition API key in Settings first.',
+      micUnavailable: "Can't use the microphone: allow it in the address bar.",
+      confirmClear: 'Clear the whole transcript?', nothingToExport: 'Nothing to export yet', exportName: 'transcript'
+    }
+  };
+  let lang = store.get('ui', /^zh/i.test(navigator.language) ? 'zh' : 'en');
+  const T = (k, ...a) => {
+    const v = I18N[lang][k] ?? I18N.zh[k] ?? k;
+    return typeof v === 'function' ? v(...a) : v;
+  };
+
   const settings = {
     src: store.get('src', 'en-US'), dst: store.get('dst', 'zh-CN'),
     engine: store.get('engine', 'google'), fs: store.get('fs', 22), showEn: store.get('showEn', true),
@@ -246,7 +486,7 @@
     settings.stt = 'ai';
     const opt = $('stt').querySelector('option[value="browser"]');
     opt.disabled = true;
-    opt.textContent += '（桌面版不可用）';
+    opt.dataset.i18nSuffix = 'sttDesktopNA';
   }
   $('aiKey').value = settings.key; $('aiModel').value = settings.model; $('aiCtx').value = settings.ctx;
   for (const k of ['oaiKey', 'oaiModel', 'oaiBase', 'sttKey', 'sttModel', 'sttBase']) $(k).value = settings[k];
@@ -300,19 +540,10 @@
   const canSystem = chromeVer >= 135 && !/Android|Mobile/i.test(navigator.userAgent)
     && !!navigator.mediaDevices?.getDisplayMedia;
   settings.source = canSystem ? store.get('source', desktop ? 'system' : 'mic') : 'mic';
-  $('source').hidden = !canSystem;
+  $('sourceField').hidden = !canSystem;
   $('source').value = settings.source;
-  if (desktop) {
-    $('empty').innerHTML = '桌面字幕版：翻译会显示在屏幕上一层透明字幕里，浮在所有程序上面。<br>'
-      + '1. 先点 <b>⚙️ 设置</b>，填好 AI 语音识别的 Key（和想用的 AI 翻译 Key）<br>'
-      + '2. 左上角声音来源选 <b>电脑声音</b>（会议、视频的声音）或加上 <b>我的麦克风</b><br>'
-      + '3. 点 <b>开始翻译</b>。字幕层默认锁定，鼠标可以点穿它；按 <b>Ctrl+Shift+L</b> 解锁后可拖动、调大小，<b>Ctrl+Shift+H</b> 隐藏/显示';
-  } else if (canSystem) {
-    $('empty')?.insertAdjacentHTML('beforeend',
-      '<br><br>💻 在电脑上开 Teams / Zoom 会议：左上角声音来源选 <b>电脑声音</b>，<br>'
-      + '点开始后选择会议所在的窗口或「整个屏幕」，并勾选 <b>共享音频</b>。戴耳机也能翻译。<br>'
-      + '想把自己说的话也记下来，选 <b>电脑声音 + 我的麦克风</b>。');
-  }
+  $('empty').dataset.i18nHtml = desktop ? 'emptyDesktop' : 'emptyWeb';
+  if (!desktop && canSystem) $('empty').dataset.i18nHtmlExtra = 'emptySystem';
   $('source').onchange = (e) => { settings.source = e.target.value; store.set('source', settings.source); if (running) { stop(); start(); } };
   $('srcLang').onchange = (e) => { settings.src = e.target.value; store.set('src', settings.src); if (running) restart(); };
   $('dstLang').onchange = (e) => { settings.dst = e.target.value; store.set('dst', settings.dst); };
@@ -322,7 +553,10 @@
   };
   $('fsUp').onclick = () => { settings.fs = Math.min(48, settings.fs + 2); store.set('fs', settings.fs); applyFs(); };
   $('fsDown').onclick = () => { settings.fs = Math.max(14, settings.fs - 2); store.set('fs', settings.fs); applyFs(); };
-  $('toggleEn').onclick = () => { settings.showEn = !settings.showEn; store.set('showEn', settings.showEn); applyEn(); };
+  $('toggleEn').onclick = () => {
+    settings.showEn = !settings.showEn; store.set('showEn', settings.showEn); applyEn();
+    $('toggleEn').classList.toggle('active', settings.showEn);
+  };
 
   // ---------- floating subtitle window (Document Picture-in-Picture, desktop Chrome/Edge) ----------
   // An always-on-top, movie-subtitle style window showing the newest lines, to sit over a
@@ -334,7 +568,7 @@
     try {
       w = await documentPictureInPicture.requestWindow({ width: 760, height: 150 });
     } catch (e) {
-      setStatus('无法打开小窗：' + e.message, true);
+      setStatus(T('errPip', e.message), true);
       return;
     }
     pipWin = w;
@@ -345,20 +579,20 @@
       body { height: 100vh; padding: 0; background: #000; color: #fff; }
       #pipBar { position: fixed; top: 4px; right: 6px; display: flex; gap: 4px; opacity: .3; transition: opacity .2s; z-index: 1; }
       body:hover #pipBar { opacity: 1; }
-      #pipBar button { background: #222; color: #fff; border: 1px solid #444; padding: 2px 9px; font-size: 12px; }
-      #pipBar button.on { background: #b91c1c; border-color: #b91c1c; }
+      #pipBar button { background: rgba(255,255,255,.14); color: #fff; padding: 3px 11px; font-size: 12px; border-radius: 999px; }
+      #pipBar button.on { background: #ff3b30; }
       #pipList { flex: 1; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding: 6px 18px 10px; }
-      #pipList .seg { border: none; padding: 3px 0; text-align: center; }
-      #pipList .seg.me { border: none; padding-left: 0; }
+      #pipList .seg { border: none; padding: 3px 0; text-align: center; background: transparent; box-shadow: none; border-radius: 0; margin: 0; max-width: none; }
+      #pipList .seg.me { background: transparent; }
       #pipList .zh { color: #fff; font-size: calc(var(--fs) * 1.15); font-weight: 600; }
       #pipList .en { color: #b8b8b8; }
       #pipList .seg.live .zh, #pipList .seg.live .en { color: #9a9a9a; }
       #pipList .seg:not(:last-child) { opacity: .55; }
       #pipList .t { display: none; }
-      #pipList .who { color: #60a5fa; font-size: .8em; margin-right: 6px; }
+      #pipList .who { color: #64d2ff; font-size: .8em; margin-right: 6px; }
       #pipList .empty { color: #9a9a9a; margin: auto; font-size: 14px; }`;
     d.head.appendChild(extra);
-    d.title = '实时翻译字幕';
+    d.title = T('pipTitle');
     d.documentElement.style.setProperty('--fs', settings.fs + 'px');
     d.body.classList.toggle('hide-en', !settings.showEn);
     d.body.innerHTML = `<div id="pipBar"><button id="pRun"></button><button id="pDown">A−</button><button id="pUp">A+</button></div><main id="pipList"></main>`;
@@ -367,29 +601,29 @@
     d.getElementById('pUp').onclick = () => $('fsUp').click();
     d.getElementById('pDown').onclick = () => $('fsDown').click();
     const render = () => {
-      run.textContent = running ? '■ 停止' : '▶ 开始';
+      run.textContent = running ? T('pipStop') : T('pipStart');
       run.classList.toggle('on', running);
       const segs = [...list.querySelectorAll('.seg')].slice(-2);
       box.replaceChildren(...(segs.length
         ? segs.map((el) => {
           const c = el.cloneNode(true);
-          const who = el.querySelector('.t').textContent.match(/^(我|对方) · /);
+          const who = el.dataset.who;
           if (who && c.querySelector('.zh').textContent) {
-            c.querySelector('.zh').prepend(Object.assign(d.createElement('span'), { className: 'who', textContent: who[1] }));
+            c.querySelector('.zh').prepend(Object.assign(d.createElement('span'), { className: 'who', textContent: T('who_' + who) }));
           }
           return c;
         })
-        : [Object.assign(d.createElement('div'), { className: 'empty', textContent: running ? '正在聆听…翻译会显示在这里' : '点右上角「▶ 开始」，翻译会像字幕一样显示在这里' })]));
+        : [Object.assign(d.createElement('div'), { className: 'empty', textContent: running ? T('pipListening') : T('pipIdle') })]));
     };
     const mo = new MutationObserver(render);
     mo.observe(list, { childList: true, subtree: true, characterData: true });
     pipSync = render;
     render();
-    $('pip').textContent = '关闭小窗';
+    $('pip').dataset.i18n = 'btnPipClose'; $('pip').textContent = T('btnPipClose');
     w.addEventListener('pagehide', () => {
       mo.disconnect();
       pipWin = null; pipSync = null;
-      $('pip').textContent = '小窗';
+      $('pip').dataset.i18n = 'btnPip'; $('pip').textContent = T('btnPip');
     });
   };
 
@@ -400,16 +634,18 @@
     $('ovl').onclick = () => desktop.toggleOverlay();
     $('ovlLock').onclick = () => desktop.toggleLock();
     desktop.onOverlayState(({ visible, locked }) => {
-      $('ovl').textContent = visible ? '隐藏字幕层' : '显示字幕层';
-      $('ovlLock').textContent = locked ? '🔒 已锁定' : '🔓 可拖动';
+      $('ovl').dataset.i18n = visible ? 'ovlHide' : 'ovlShow';
+      $('ovlLock').dataset.i18n = locked ? 'ovlLocked' : 'ovlUnlocked';
+      applyLang();
     });
-    $('ovl').textContent = '隐藏字幕层';
+    $('ovl').dataset.i18n = 'ovlHide';
+    $('ovlLock').dataset.i18n = 'ovlLocked';
     desktopSync = () => {
       const lines = [...list.querySelectorAll('.seg')].slice(-2).map((el) => ({
         zh: el.querySelector('.zh').textContent,
         en: el.querySelector('.en').textContent,
         live: el.classList.contains('live'),
-        who: (el.querySelector('.t').textContent.match(/^(我|对方) · /) || [])[1] || ''
+        who: el.dataset.who ? T('who_' + el.dataset.who) : ''
       }));
       desktop.sendSubtitles({ fs: settings.fs, showEn: settings.showEn, running, lines });
     };
@@ -434,7 +670,7 @@
         if (out) { cache.set(key, out); return out; }
       } catch (e) { lastErr = e; }
     }
-    throw lastErr || new Error('翻译失败');
+    throw lastErr || new Error(T('translateFail'));
   }
   async function google(text, dst) {
     const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=' + srcCode() + '&tl='
@@ -450,7 +686,7 @@
     const r = await fetch(url);
     if (!r.ok) throw new Error('MyMemory ' + r.status);
     const j = await r.json();
-    if (j.responseStatus !== 200 && j.responseStatus !== '200') throw new Error(j.responseDetails || 'MyMemory 错误');
+    if (j.responseStatus !== 200 && j.responseStatus !== '200') throw new Error(j.responseDetails || 'MyMemory: ' + T('svcErr'));
     return j.responseData.translatedText;
   }
 
@@ -484,13 +720,12 @@
         r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: ctl.signal });
       } catch (e) {
         if (e.name === 'AbortError') throw e;
-        throw new Error(name + ' 连接失败（网络不通，或该服务不允许网页直接调用）');
+        throw new Error(T('connFail', name));
       }
       if (!r.ok) {
         let detail = '';
         try { const j = await r.json(); detail = j.error?.message || j.message || ''; } catch {}
-        const label = { 401: 'API Key 无效', 402: '余额不足', 403: '没有权限', 429: '超出速率或额度限制', 529: '服务繁忙' }[r.status] || 'HTTP ' + r.status;
-        throw new Error(name + ' ' + label + (detail ? '：' + detail : ''));
+        throw new Error(T('httpErr', name, r.status, detail));
       }
       reader = r.body.getReader();
       const dec = new TextDecoder();
@@ -512,7 +747,7 @@
       }
       handle(buf + dec.decode());
     } catch (e) {
-      if (e.name === 'AbortError') throw new Error(name + ' 响应超时');
+      if (e.name === 'AbortError') throw new Error(T('timeout', name));
       throw e;
     } finally {
       clearTimeout(timer);
@@ -523,7 +758,7 @@
 
   // Claude Messages API, called straight from the browser; onText gets the text so far.
   async function claude(seg, onText) {
-    if (!settings.key) throw new Error('请先在 ⚙️ 设置 里填写 Claude API Key');
+    if (!settings.key) throw new Error(T('needKey', 'Claude'));
     const { system, content } = buildPrompt(seg);
     const body = {
       model: settings.model, max_tokens: 2048, stream: true,
@@ -552,17 +787,17 @@
       } else if (ev.type === 'message_delta' && ev.delta?.stop_reason) {
         stop = ev.delta.stop_reason;
       } else if (ev.type === 'error') {
-        throw new Error('Claude：' + (ev.error?.message || '服务错误'));
+        throw new Error('Claude: ' + (ev.error?.message || T('svcErr')));
       }
     });
-    if (stop === 'refusal') throw new Error('Claude 未翻译这一句');
+    if (stop === 'refusal') throw new Error(T('refusal'));
     return out.trim();
   }
 
   // OpenAI-compatible chat completions (DeepSeek by default).
   async function openaiCompat(seg, onText) {
     const name = /deepseek/i.test(settings.oaiBase) ? 'DeepSeek' : 'AI';
-    if (!settings.oaiKey) throw new Error('请先在 ⚙️ 设置 里填写 ' + name + ' API Key');
+    if (!settings.oaiKey) throw new Error(T('needKey', name));
     const { system, content } = buildPrompt(seg);
     const body = {
       model: settings.oaiModel, stream: true, temperature: 0.3,
@@ -577,7 +812,7 @@
       if (data === '[DONE]') return;
       let ev;
       try { ev = JSON.parse(data); } catch { return; }
-      if (ev.error) throw new Error(name + '：' + (ev.error.message || '服务错误'));
+      if (ev.error) throw new Error(name + ': ' + (ev.error.message || T('svcErr')));
       const piece = ev.choices?.[0]?.delta?.content;
       if (piece) { out += piece; onText(out); }
     });
@@ -586,7 +821,16 @@
 
   // ---------- transcript UI ----------
   const segments = []; // {time, en, zh, who}  who: 'me' | 'them' | '' (unlabelled)
-  const WHO_LABEL = { me: '我', them: '对方' };
+  const whoLabel = (who) => (who ? T('who_' + who) : '');
+  // Caption under a sentence: speaker badge + time; re-rendered when the interface language changes.
+  function renderMeta(el) {
+    const t = el.querySelector('.t');
+    if (!t || !el.dataset.time) return;
+    const parts = [];
+    if (el.dataset.who) parts.push(Object.assign(document.createElement('span'), { className: 'who', textContent: whoLabel(el.dataset.who) }));
+    parts.push(document.createTextNode(el.dataset.time));
+    t.replaceChildren(...parts);
+  }
   const isChinese = (t) => /[\u4e00-\u9fff]/.test(t) && !/[a-z]{3}/i.test(t);
   let liveEl = null, liveText = '', liveTimer = null, liveReq = 0;
 
@@ -639,7 +883,9 @@
     const seg = { time: opts.time || new Date(), en: text, zh: '', who };
     segments.push(seg);
     el.querySelector('.en').textContent = text;
-    el.querySelector('.t').textContent = (WHO_LABEL[who] ? WHO_LABEL[who] + ' · ' : '') + fmtTime(seg.time);
+    if (who) el.dataset.who = who;
+    el.dataset.time = fmtTime(seg.time);
+    renderMeta(el);
     scrollDown(stick);
     const zhEl = el.querySelector('.zh');
     // My own Chinese needs no translation; show it as the main line.
@@ -657,21 +903,21 @@
         const ai = settings.engine === 'claude' ? claude : openaiCompat;
         seg.zh = await ai(seg, (partial) => { zhEl.textContent = partial; scrollDown(stick); });
         zhEl.textContent = seg.zh;
-        report(running ? '正在聆听…' : '');
+        report(running ? T('listening') : '');
         scrollDown(stick);
         return;
       } catch (e) {
         if (!segments.includes(seg)) return; // transcript was cleared
-        note = e.message + '（这句已改用 Google 翻译）';
+        note = T('fellBack', e.message);
       }
     }
     try {
       seg.zh = await translate(text);
       zhEl.textContent = seg.zh;
-      report(note || (running ? '正在聆听…' : ''), !!note);
+      report(note || (running ? T('listening') : ''), !!note);
     } catch (e) {
-      zhEl.textContent = '（翻译失败）';
-      report('翻译服务连接失败：' + e.message + '。可在顶部切换翻译引擎。', true);
+      zhEl.textContent = T('cellFail');
+      report(T('translateConnFail', e.message), true);
     }
     scrollDown(stick);
   }
@@ -757,14 +1003,13 @@
           method: 'POST', headers: { authorization: 'Bearer ' + settings.sttKey }, body: fd, signal: ctl.signal
         });
       } catch (e) {
-        if (e.name === 'AbortError') throw new Error('AI 识别响应超时');
-        throw new Error('AI 识别连接失败（网络不通，或该服务不允许网页直接调用）');
+        if (e.name === 'AbortError') throw new Error(T('timeout', T('sttName')));
+        throw new Error(T('connFail', T('sttName')));
       }
       if (!r.ok) {
         let detail = '';
         try { const j = await r.json(); detail = j.error?.message || j.message || ''; } catch {}
-        const label = { 401: 'API Key 无效', 402: '余额不足', 403: '没有权限', 429: '超出速率或额度限制' }[r.status] || 'HTTP ' + r.status;
-        throw new Error('AI 识别 ' + label + (detail ? '：' + detail : ''));
+        throw new Error(T('httpErr', T('sttName'), r.status, detail));
       }
       const j = await r.json();
       // SenseVoice may tag language/emotion/events like <|en|><|NEUTRAL|>; drop the tags.
@@ -781,16 +1026,17 @@
     const stopVad = createVad(ctx, stream, () => {
       const stick = nearBottom();
       el = makeSeg('live');
-      el.querySelector('.en').textContent = (WHO_LABEL[who] ? WHO_LABEL[who] + '：' : '') + '🎙️ …';
+      if (who) el.dataset.who = who;
+      el.querySelector('.en').textContent = (who ? whoLabel(who) + ': ' : '') + '🎙️ …';
       startedAt = new Date();
       list.appendChild(el);
       scrollDown(stick);
-      if (!quietShown) setStatus('听到说话了，正在识别…');
+      if (!quietShown) setStatus(T('heard'));
     }, async (wav) => {
       const mine = el, time = startedAt;
       el = null;
       if (!wav) { mine.remove(); return; }
-      mine.querySelector('.en').textContent = (WHO_LABEL[who] ? WHO_LABEL[who] + '：' : '') + '识别中…';
+      mine.querySelector('.en').textContent = (who ? whoLabel(who) + ': ' : '') + T('recognizing');
       try {
         const text = await transcribe(wav, who);
         if (!mine.isConnected) return; // transcript was cleared
@@ -812,16 +1058,14 @@
       recTrack ? r.start(recTrack) : r.start();
     } catch (e) {
       if (e.name === 'InvalidStateError' && !recTrack) return; // already running
-      setStatus('无法开始语音识别：' + e.message
-        + (recTrack ? '（电脑声音模式需要电脑版 Chrome / Edge 135 以上）' : ''), true);
+      setStatus(T('srStartFail', e.message, !!recTrack), true);
     }
   };
 
   // Volume meter, so it is obvious whether any sound reaches the page at all.
   let meterCtx = null, meterMic = null, meterTimer = null, quietSince = 0, quietShown = false;
   const QUIET_MSG = () => (audioTrack
-    ? '没有收到声音：请确认视频正在播放，并且共享时打开了「分享标签页音频 / 系统音频」。'
-    : '麦克风没有收到声音：戴耳机时请把声音来源改成「电脑声音」，或把外放音量调大。');
+    ? T('quietSystem') : T('quietMic'));
   async function startMeter() {
     try {
       const track = recTrack || audioTrack || micStream?.getAudioTracks()[0];
@@ -844,7 +1088,7 @@
         bar.style.width = Math.round(level * 100) + '%';
         if (level > 0.04) {
           quietSince = Date.now();
-          if (quietShown) { quietShown = false; setStatus('收到声音了，正在聆听…'); }
+          if (quietShown) { quietShown = false; setStatus(T('soundBack')); }
         } else if (!quietShown && Date.now() - quietSince > 6000) {
           quietShown = true;
           setStatus(QUIET_MSG(), true);
@@ -870,13 +1114,13 @@
         systemAudio: 'include'
       });
     } catch {
-      setStatus('已取消共享。', true);
+      setStatus(T('shareCancel'), true);
       return false;
     }
     audioTrack = capture.getAudioTracks()[0] || null;
     if (!audioTrack) {
       stopCapture();
-      setStatus('没有共享到声音。请重新开始，共享时勾选「共享标签页音频」或「共享系统音频」。', true);
+      setStatus(T('noAudioShared'), true);
       return false;
     }
     audioTrack.onended = () => { if (running) stop(); };
@@ -902,17 +1146,17 @@
       }
       if (interim.trim()) showLive(interim.trim());
     };
-    r.onspeechstart = () => { if (!quietShown) setStatus('听到说话了，正在识别…'); };
+    r.onspeechstart = () => { if (!quietShown) setStatus(T('heard')); };
     r.onerror = (ev) => {
       if (ev.error === 'no-speech' || ev.error === 'aborted') return;
-      if (ev.error === 'audio-capture') { setStatus('拿不到声音：找不到麦克风，或声音来源不可用。', true); return; }
+      if (ev.error === 'audio-capture') { setStatus(T('audioCapture'), true); return; }
       if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
-        setStatus('麦克风权限被拒绝。请在浏览器地址栏里允许麦克风后重试。', true);
+        setStatus(T('micDenied'), true);
         stop();
       } else if (ev.error === 'network') {
-        setStatus('语音识别需要联网（浏览器的语音服务连接失败），正在重试…', true);
+        setStatus(T('srNetwork'), true);
       } else {
-        setStatus('语音识别错误：' + ev.error, true);
+        setStatus(T('srError', ev.error), true);
       }
     };
     // Browsers end recognition after silence or ~60s; restart while the user wants it on.
@@ -927,12 +1171,12 @@
   async function start() {
     const useAI = settings.stt === 'ai';
     if (!SR && !useAI) {
-      setStatus('当前浏览器不支持语音识别。请用 Chrome / Edge（电脑、安卓）或 Safari（iPhone）打开，或在 ⚙️ 设置 里改用 AI 识别。', true);
+      setStatus(T('noSR'), true);
       return;
     }
     if (useAI && !settings.sttKey) {
       openSettings();
-      setStatus('请先在 ⚙️ 设置 里填写 AI 语音识别的 API Key。', true);
+      setStatus(T('needSttKey'), true);
       return;
     }
     const src = settings.source;
@@ -943,7 +1187,7 @@
         micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       } catch {
         stopCapture();
-        setStatus('拿不到麦克风：请在浏览器地址栏里允许使用麦克风。', true);
+        setStatus(T('micUnavailable'), true);
         return;
       }
     }
@@ -966,8 +1210,8 @@
       rec = buildRec();
       recStart(rec);
     }
-    micBtn.classList.add('on'); micLabel.textContent = '停止';
-    setStatus((useAI ? 'AI 识别：' : '') + ({ mic: '正在聆听…', system: '正在聆听电脑声音…', both: '正在聆听电脑声音和我的麦克风…' })[src]);
+    micBtn.classList.add('on'); micLabel.textContent = T('micStop');
+    setStatus((useAI ? T('aiPrefix') : '') + T({ mic: 'listening', system: 'listeningSystem', both: 'listeningBoth' }[src]));
     startMeter();
     pipSync?.(); desktopSync?.();
     try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
@@ -985,9 +1229,9 @@
     micStream = null; recTrack = null;
     try { audioCtx && audioCtx.close(); } catch {}
     audioCtx = null;
-    micBtn.classList.remove('on'); micLabel.textContent = '开始翻译';
+    micBtn.classList.remove('on'); micLabel.textContent = T('micStart');
     pipSync?.(); desktopSync?.();
-    if (!statusEl.classList.contains('err')) setStatus('已停止');
+    if (!statusEl.classList.contains('err')) setStatus(T('stopped'));
     try { wakeLock && wakeLock.release(); } catch {}
     wakeLock = null;
   }
@@ -1002,23 +1246,49 @@
   });
 
   $('clear').onclick = () => {
-    if (segments.length && !confirm('清空所有记录？')) return;
+    if (segments.length && !confirm(T('confirmClear'))) return;
     inflight.forEach((c) => c.abort());
     segments.length = 0; list.innerHTML = ''; liveEl = null;
   };
   $('export').onclick = () => {
-    if (!segments.length) { setStatus('还没有内容可以导出'); return; }
-    const body = segments.map((s) => `[${fmtTime(s.time)}]${WHO_LABEL[s.who] ? ' ' + WHO_LABEL[s.who] : ''}\n`
+    if (!segments.length) { setStatus(T('nothingToExport')); return; }
+    const body = segments.map((s) => `[${fmtTime(s.time)}]${s.who ? ' ' + whoLabel(s.who) : ''}\n`
       + (s.en === s.zh ? s.zh : `${s.en}\n${s.zh}`) + '\n').join('\n');
     const blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = '会议记录-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.txt';
+    a.download = T('exportName') + '-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.txt';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
 
-  if (!SR && settings.stt !== 'ai') setStatus('当前浏览器不支持浏览器自带的语音识别。请用 Chrome / Edge 或 Safari 打开，或在 ⚙️ 设置 里改用 AI 识别。', true);
+  // Re-renders every translatable piece of the interface in the current language.
+  function applyLang() {
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+    document.title = T('appName');
+    document.querySelectorAll('[data-i18n]').forEach((el) => {
+      el.textContent = T(el.dataset.i18n) + (el.dataset.i18nSuffix ? T(el.dataset.i18nSuffix) : '');
+    });
+    document.querySelectorAll('[data-i18n-html]').forEach((el) => {
+      el.innerHTML = T(el.dataset.i18nHtml) + (el.dataset.i18nHtmlExtra ? T(el.dataset.i18nHtmlExtra) : '');
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = T(el.dataset.i18nTitle); el.setAttribute('aria-label', el.title); });
+    document.querySelectorAll('[data-i18n-ph]').forEach((el) => { el.placeholder = T(el.dataset.i18nPh); });
+    document.querySelectorAll('.seg').forEach(renderMeta);
+    micLabel.textContent = T(running ? 'micStop' : 'micStart');
+    $('langBtn').textContent = lang === 'zh' ? 'EN' : '中文';
+    $('toggleEn').classList.toggle('active', settings.showEn);
+    pipSync?.(); desktopSync?.();
+  }
+  $('langBtn').onclick = () => {
+    lang = lang === 'zh' ? 'en' : 'zh';
+    store.set('ui', lang);
+    applyLang();
+    if (!statusEl.classList.contains('err')) setStatus(running ? T('listening') : '');
+  };
+  applyLang();
+
+  if (!SR && settings.stt !== 'ai') setStatus(T('noSR'), true);
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
