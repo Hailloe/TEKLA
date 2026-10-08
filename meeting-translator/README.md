@@ -19,6 +19,15 @@
 - Key 只保存在本机浏览器，只发给 `api.anthropic.com`；按用量计费
 - Claude 出错（Key 不对、没额度、网络）时这一句会自动改用 Google 翻译
 
+### DeepSeek / 其他 AI
+
+翻译引擎选 **DeepSeek / 其他 AI**，填入 DeepSeek 的 API Key（在 [platform.deepseek.com](https://platform.deepseek.com/api_keys) 申请）。
+
+- 默认接口 `https://api.deepseek.com`，模型 `deepseek-v4-flash`（快、便宜；想更准可改成 `deepseek-v4-pro`）
+- 已自动关闭 DeepSeek 的“深度思考”，翻译出字更快
+- 其他兼容 OpenAI 接口格式的 AI（如通义千问、Kimi、智谱等）也能用：把“接口地址”和“模型”改成它们文档里写的即可
+- 如果提示“连接失败（该服务不允许网页直接调用）”，说明这家 AI 不允许浏览器直接访问，只能换一家
+
 ### 延迟
 
 | 阶段 | 大约 |
