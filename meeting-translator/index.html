@@ -51,6 +51,7 @@
   .ai label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
   .ai input, .ai select { font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 100%; }
   .ai .wide { grid-column: 1 / -1; }
+  .ai [data-hidden] { display: none; }
   .ai .note { grid-column: 1 / -1; font-size: 12px; color: var(--muted); line-height: 1.5; }
   .ai a { color: var(--accent); }
   #status { font-size: 13px; color: var(--muted); padding: 6px 16px; min-height: 28px; }
@@ -112,6 +113,7 @@
   </select>
   <select id="engine" title="翻译引擎">
     <option value="claude">Claude AI 翻译</option>
+    <option value="openai">DeepSeek / 其他 AI</option>
     <option value="google">Google 翻译</option>
     <option value="mymemory">MyMemory</option>
   </select>
@@ -120,23 +122,37 @@
   <button id="toggleEn" title="显示/隐藏原文">原文</button>
 </header>
 <section class="ai" id="aiBox" hidden>
-  <label>Claude API Key
+  <label data-for="claude">Claude API Key
     <input id="aiKey" type="password" autocomplete="off" placeholder="sk-ant-...">
   </label>
-  <label>模型
+  <label data-for="claude">模型
     <select id="aiModel">
       <option value="claude-opus-5-5">Opus 5.5（最准）</option>
       <option value="claude-sonnet-5-5">Sonnet 5.5（较快）</option>
       <option value="claude-haiku-5-5">Haiku 5.5（最快最省）</option>
     </select>
   </label>
+  <label data-for="openai">API Key
+    <input id="oaiKey" type="password" autocomplete="off" placeholder="sk-...">
+  </label>
+  <label data-for="openai">模型
+    <input id="oaiModel" type="text" autocomplete="off" spellcheck="false">
+  </label>
+  <label class="wide" data-for="openai">接口地址（OpenAI 兼容）
+    <input id="oaiBase" type="url" autocomplete="off" spellcheck="false">
+  </label>
   <label class="wide">会议主题 / 专有名词（可选，让 AI 翻得更准）
     <input id="aiCtx" type="text" placeholder="例如：钢结构项目周会；Tekla、BIM、shop drawing、RFI">
   </label>
-  <div class="note">
+  <div class="note" data-for="claude">
     说话时先用 Google 显示即时预览，一句话说完后由 Claude 结合上下文重新翻译（逐字显示）。
     API Key 只保存在本机浏览器里，只发送给 api.anthropic.com。
     在 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a> 申请 Key。
+  </div>
+  <div class="note" data-for="openai">
+    默认是 DeepSeek（在 <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">platform.deepseek.com</a> 申请 Key）。
+    其他支持 OpenAI 接口格式的 AI 也可以用：改成它的接口地址和模型名即可。
+    API Key 只保存在本机浏览器里，只发送给上面的接口地址。
   </div>
 </section>
 <div id="status"></div>
@@ -168,15 +184,35 @@
   const settings = {
     src: store.get('src', 'en-US'), dst: store.get('dst', 'zh-CN'),
     engine: store.get('engine', 'google'), fs: store.get('fs', 22), showEn: store.get('showEn', true),
-    key: store.get('key', ''), model: store.get('model', 'claude-opus-5-5'), ctx: store.get('ctx', '')
+    key: store.get('key', ''), model: store.get('model', 'claude-opus-5-5'), ctx: store.get('ctx', ''),
+    oaiKey: store.get('oaiKey', ''), oaiModel: store.get('oaiModel', 'deepseek-v4-flash'),
+    oaiBase: store.get('oaiBase', 'https://api.deepseek.com')
   };
   if (![...$('aiModel').options].some((o) => o.value === settings.model)) settings.model = 'claude-opus-5-5';
   $('aiKey').value = settings.key; $('aiModel').value = settings.model; $('aiCtx').value = settings.ctx;
+  $('oaiKey').value = settings.oaiKey; $('oaiModel').value = settings.oaiModel; $('oaiBase').value = settings.oaiBase;
+  const isAI = () => settings.engine === 'claude' || settings.engine === 'openai';
+  const aiKey = () => (settings.engine === 'claude' ? settings.key : settings.oaiKey);
   // The AI settings panel folds away while translating so the transcript gets the screen.
-  const applyEngine = () => { $('aiBox').hidden = settings.engine !== 'claude' || (running && !!settings.key); };
+  const applyEngine = () => {
+    $('aiBox').hidden = !isAI() || (running && !!aiKey());
+    document.querySelectorAll('#aiBox [data-for]').forEach((el) => {
+      el.toggleAttribute('data-hidden', el.dataset.for !== settings.engine);
+    });
+  };
   applyEngine();
   $('aiKey').onchange = (e) => { settings.key = e.target.value.trim(); store.set('key', settings.key); };
   $('aiModel').onchange = (e) => { settings.model = e.target.value; store.set('model', settings.model); };
+  const bindText = (id, k, fallback) => {
+    $(id).onchange = (e) => {
+      settings[k] = e.target.value.trim() || fallback;
+      e.target.value = settings[k];
+      store.set(k, settings[k]);
+    };
+  };
+  bindText('oaiKey', 'oaiKey', '');
+  bindText('oaiModel', 'oaiModel', 'deepseek-v4-flash');
+  bindText('oaiBase', 'oaiBase', 'https://api.deepseek.com');
   $('aiCtx').onchange = (e) => { settings.ctx = e.target.value.trim(); store.set('ctx', settings.ctx); };
   $('srcLang').value = settings.src; $('dstLang').value = settings.dst; $('engine').value = settings.engine;
   const applyFs = () => document.documentElement.style.setProperty('--fs', settings.fs + 'px');
@@ -245,11 +281,8 @@
   const LANG_NAMES = { en: 'English', th: 'Thai', ja: 'Japanese', ko: 'Korean', vi: 'Vietnamese',
     ms: 'Malay', id: 'Indonesian', fr: 'French', de: 'German', es: 'Spanish' };
 
-  // Streams a context-aware translation from the Claude Messages API; onText gets the text so far.
-  const inflight = new Set(); // AbortControllers of running Claude requests
-  async function claude(seg, onText) {
-    const text = seg.en;
-    if (!settings.key) throw new Error('请先在上方填写 Claude API Key');
+  // System prompt and user message shared by the AI engines.
+  function buildPrompt(seg) {
     const srcName = LANG_NAMES[srcCode()] || settings.src;
     const dstName = settings.dst === 'zh-TW' ? 'Traditional Chinese (繁體中文)' : 'Simplified Chinese (简体中文)';
     let system = `You are a professional live interpreter. Each user message contains one new segment of a live speech-recognition transcript in ${srcName}. Translate it into natural, fluent ${dstName}, the way a skilled human interpreter would say it. Speech recognition sometimes mishears words or splits sentences oddly; use the recent context to infer what the speaker meant. Reply with only the translation of the new segment - no quotes, notes, or original text.`;
@@ -257,8 +290,65 @@
     // Earlier segments still being translated are included as source text only.
     const prev = segments.slice(0, segments.indexOf(seg)).slice(-3)
       .map((s) => (s.zh ? `${s.en}\n=> ${s.zh}` : s.en)).join('\n\n');
-    const content = (prev ? `Recent context:\n${prev}\n\n` : '') + `New segment to translate:\n${text}`;
+    const content = (prev ? `Recent context:\n${prev}\n\n` : '') + `New segment to translate:\n${seg.en}`;
+    return { system, content };
+  }
 
+  // POSTs a streaming request and feeds each SSE `data:` payload to onData.
+  // Times out after 25s; clearing the transcript aborts it.
+  const inflight = new Set();
+  async function streamSSE(name, url, headers, body, onData) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 25000);
+    inflight.add(ctl);
+    let reader;
+    try {
+      let r;
+      try {
+        r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: ctl.signal });
+      } catch (e) {
+        if (e.name === 'AbortError') throw e;
+        throw new Error(name + ' 连接失败（网络不通，或该服务不允许网页直接调用）');
+      }
+      if (!r.ok) {
+        let detail = '';
+        try { const j = await r.json(); detail = j.error?.message || j.message || ''; } catch {}
+        const label = { 401: 'API Key 无效', 402: '余额不足', 403: '没有权限', 429: '超出速率或额度限制', 529: '服务繁忙' }[r.status] || 'HTTP ' + r.status;
+        throw new Error(name + ' ' + label + (detail ? '：' + detail : ''));
+      }
+      reader = r.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      const handle = (chunk) => {
+        for (const line of chunk.split('\n')) {
+          if (line.startsWith('data:')) onData(line.slice(5).trim());
+        }
+      };
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n\n')) >= 0) {
+          handle(buf.slice(0, i));
+          buf = buf.slice(i + 2);
+        }
+      }
+      handle(buf + dec.decode());
+    } catch (e) {
+      if (e.name === 'AbortError') throw new Error(name + ' 响应超时');
+      throw e;
+    } finally {
+      clearTimeout(timer);
+      inflight.delete(ctl);
+      try { reader && (await reader.cancel()); } catch {}
+    }
+  }
+
+  // Claude Messages API, called straight from the browser; onText gets the text so far.
+  async function claude(seg, onText) {
+    if (!settings.key) throw new Error('请先在上方填写 Claude API Key');
+    const { system, content } = buildPrompt(seg);
     const body = {
       model: settings.model, max_tokens: 2048, stream: true,
       output_config: { effort: 'low' },
@@ -275,59 +365,47 @@
       body.fallbacks = 'default';
       headers['anthropic-beta'] = 'server-side-fallback-2026-07-01';
     }
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 25000);
-    inflight.add(ctl);
-    let reader;
-    try {
-      const r = await fetch('https://api.anthropic.com/v1/messages',
-        { method: 'POST', headers, body: JSON.stringify(body), signal: ctl.signal });
-      if (!r.ok) {
-        let detail = '';
-        try { detail = (await r.json()).error.message || ''; } catch {}
-        const label = { 401: 'API Key 无效', 403: '没有权限', 429: '超出速率或额度限制', 529: '服务繁忙' }[r.status] || 'HTTP ' + r.status;
-        throw new Error('Claude ' + label + (detail ? '：' + detail : ''));
+    let out = '', stop = null;
+    await streamSSE('Claude', 'https://api.anthropic.com/v1/messages', headers, body, (data) => {
+      let ev;
+      try { ev = JSON.parse(data); } catch { return; }
+      // On a mid-stream server-side fallback the partial text is kept and the fallback model continues it.
+      if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
+        out += ev.delta.text;
+        onText(out);
+      } else if (ev.type === 'message_delta' && ev.delta?.stop_reason) {
+        stop = ev.delta.stop_reason;
+      } else if (ev.type === 'error') {
+        throw new Error('Claude：' + (ev.error?.message || '服务错误'));
       }
-      reader = r.body.getReader();
-      const dec = new TextDecoder();
-      let buf = '', out = '', stop = null;
-      const handle = (chunk) => {
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data:')) continue;
-          let ev;
-          try { ev = JSON.parse(line.slice(5)); } catch { continue; }
-          // On a mid-stream server-side fallback the partial text is kept and the fallback model continues it.
-          if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
-            out += ev.delta.text;
-            onText(out);
-          } else if (ev.type === 'message_delta' && ev.delta?.stop_reason) {
-            stop = ev.delta.stop_reason;
-          } else if (ev.type === 'error') {
-            throw new Error('Claude：' + (ev.error?.message || '服务错误'));
-          }
-        }
-      };
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        let i;
-        while ((i = buf.indexOf('\n\n')) >= 0) {
-          handle(buf.slice(0, i));
-          buf = buf.slice(i + 2);
-        }
-      }
-      handle(buf + dec.decode());
-      if (stop === 'refusal') throw new Error('Claude 未翻译这一句');
-      return out.trim();
-    } catch (e) {
-      if (e.name === 'AbortError') throw new Error('Claude 响应超时');
-      throw e;
-    } finally {
-      clearTimeout(timer);
-      inflight.delete(ctl);
-      try { reader && (await reader.cancel()); } catch {}
-    }
+    });
+    if (stop === 'refusal') throw new Error('Claude 未翻译这一句');
+    return out.trim();
+  }
+
+  // OpenAI-compatible chat completions (DeepSeek by default).
+  async function openaiCompat(seg, onText) {
+    const name = /deepseek/i.test(settings.oaiBase) ? 'DeepSeek' : 'AI';
+    if (!settings.oaiKey) throw new Error('请先在上方填写 ' + name + ' API Key');
+    const { system, content } = buildPrompt(seg);
+    const body = {
+      model: settings.oaiModel, stream: true, temperature: 0.3,
+      messages: [{ role: 'system', content: system }, { role: 'user', content }]
+    };
+    // DeepSeek V4 thinks by default; translation doesn't need it and thinking adds seconds.
+    if (name === 'DeepSeek') body.thinking = { type: 'disabled' };
+    const url = settings.oaiBase.replace(/\/+$/, '') + '/chat/completions';
+    const headers = { 'content-type': 'application/json', authorization: 'Bearer ' + settings.oaiKey };
+    let out = '';
+    await streamSSE(name, url, headers, body, (data) => {
+      if (data === '[DONE]') return;
+      let ev;
+      try { ev = JSON.parse(data); } catch { return; }
+      if (ev.error) throw new Error(name + '：' + (ev.error.message || '服务错误'));
+      const piece = ev.choices?.[0]?.delta?.content;
+      if (piece) { out += piece; onText(out); }
+    });
+    return out.trim();
   }
 
   // ---------- transcript UI ----------
@@ -382,9 +460,10 @@
     // Only the newest segment reports status, so a slow older request can't hide a newer error.
     const report = (msg, isErr) => { if (segments[segments.length - 1] === seg) setStatus(msg, isErr); };
     let note = '';
-    if (settings.engine === 'claude') {
+    if (isAI()) {
       try {
-        seg.zh = await claude(seg, (partial) => { zhEl.textContent = partial; scrollDown(stick); });
+        const ai = settings.engine === 'claude' ? claude : openaiCompat;
+        seg.zh = await ai(seg, (partial) => { zhEl.textContent = partial; scrollDown(stick); });
         zhEl.textContent = seg.zh;
         report(running ? '正在聆听…' : '');
         scrollDown(stick);
