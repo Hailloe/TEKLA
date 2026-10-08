@@ -26,7 +26,7 @@
 
 ## 部署（得到一个手机能打开的网址）
 
-合并到 `main` 后，`.github/workflows/translator-pages.yml` 会自动发布到 GitHub Pages：
+合并到仓库默认分支后，`.github/workflows/translator-pages.yml` 会自动发布到 GitHub Pages：
 
 1. 仓库 **Settings → Pages → Build and deployment → Source** 选 **GitHub Actions**
 2. 合并后，在 **Actions → translator-pages** 里能看到网址，形如
