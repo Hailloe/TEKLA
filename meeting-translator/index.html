@@ -46,8 +46,15 @@
   }
   button { cursor: pointer; }
   button:disabled { opacity: .5; cursor: default; }
-  .ai { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
-  .ai[hidden] { display: none; }
+  dialog#settings {
+    width: min(600px, calc(100% - 24px)); max-height: calc(100% - 24px); padding: 0;
+    border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text);
+  }
+  dialog#settings::backdrop { background: rgba(0, 0, 0, .45); }
+  .ai { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 14px 16px; }
+  .ai h2 { grid-column: 1 / -1; margin: 0; font-size: 17px; }
+  .ai h3 { grid-column: 1 / -1; margin: 10px 0 0; font-size: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .ai .done { grid-column: 1 / -1; justify-self: end; margin-top: 6px; background: var(--accent); color: var(--accent-text); border: none; padding: 8px 20px; }
   .ai label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
   .ai input, .ai select { font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 100%; }
   .ai .wide { grid-column: 1 / -1; }
@@ -64,6 +71,7 @@
   .seg { padding: 10px 0; border-bottom: 1px solid var(--line); }
   .seg .zh { font-size: var(--fs); line-height: 1.45; color: var(--zh); font-weight: 500; }
   .seg .en { font-size: calc(var(--fs) * .68); line-height: 1.4; color: var(--en); margin-top: 4px; }
+  .seg.me { border-left: 3px solid var(--accent); padding-left: 10px; }
   .seg .t { font-size: 11px; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
   .seg.live .zh, .seg.live .en { color: var(--live); }
   body.hide-en .seg .en { display: none; }
@@ -93,6 +101,7 @@
   <select id="source" title="声音来源" hidden>
     <option value="mic">🎤 麦克风</option>
     <option value="system">💻 电脑声音（Teams / 视频）</option>
+    <option value="both">💻+🎤 电脑声音 + 我的麦克风</option>
   </select>
   <select id="srcLang" title="说话人语言">
     <option value="en-US">英语 (美)</option>
@@ -125,41 +134,70 @@
   <button id="fsUp" title="放大字体">A+</button>
   <button id="toggleEn" title="显示/隐藏原文">原文</button>
   <button id="pip" title="打开一个置顶的悬浮字幕小窗，可以放在视频或 Teams 旁边" hidden>小窗</button>
+  <button id="settingsBtn" title="设置 API Key、AI 语音识别、会议专有名词">⚙️ 设置</button>
 </header>
-<section class="ai" id="aiBox" hidden>
-  <label data-for="claude">Claude API Key
+<dialog id="settings">
+<form method="dialog" class="ai">
+  <h2>⚙️ 设置</h2>
+  <div class="note">所有 API Key 只保存在这台设备的浏览器里，只发送给对应的服务。换电脑或清除浏览器数据后需要重新填写。</div>
+
+  <h3>AI 翻译 · Claude（顶部翻译引擎选「Claude AI 翻译」时使用）</h3>
+  <label>Claude API Key
     <input id="aiKey" type="password" autocomplete="off" placeholder="sk-ant-...">
   </label>
-  <label data-for="claude">模型
+  <label>模型
     <select id="aiModel">
       <option value="claude-opus-5-5">Opus 5.5（最准）</option>
       <option value="claude-sonnet-5-5">Sonnet 5.5（较快）</option>
       <option value="claude-haiku-5-5">Haiku 5.5（最快最省）</option>
     </select>
   </label>
-  <label data-for="openai">API Key
+  <div class="note">在 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a> 申请 Key。</div>
+
+  <h3>AI 翻译 · DeepSeek / 其他 AI（顶部选「DeepSeek / 其他 AI」时使用）</h3>
+  <label>API Key
     <input id="oaiKey" type="password" autocomplete="off" placeholder="sk-...">
   </label>
-  <label data-for="openai">模型
+  <label>模型
     <input id="oaiModel" type="text" autocomplete="off" spellcheck="false">
   </label>
-  <label class="wide" data-for="openai">接口地址（OpenAI 兼容）
+  <label class="wide">接口地址（OpenAI 兼容）
     <input id="oaiBase" type="url" autocomplete="off" spellcheck="false">
   </label>
+  <div class="note">
+    默认是 DeepSeek（在 <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">platform.deepseek.com</a> 申请 Key）。
+    通义千问、Kimi 等支持 OpenAI 接口格式的 AI，改成它们的接口地址和模型名即可。
+  </div>
+
   <label class="wide">会议主题 / 专有名词（可选，让 AI 翻得更准）
     <input id="aiCtx" type="text" placeholder="例如：钢结构项目周会；Tekla、BIM、shop drawing、RFI">
   </label>
-  <div class="note" data-for="claude">
-    说话时先用 Google 显示即时预览，一句话说完后由 Claude 结合上下文重新翻译（逐字显示）。
-    API Key 只保存在本机浏览器里，只发送给 api.anthropic.com。
-    在 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a> 申请 Key。
+
+  <h3>语音识别（把声音变成文字）</h3>
+  <label class="wide">识别方式
+    <select id="stt">
+      <option value="browser">浏览器自带（免费；Chrome 需要能连 Google）</option>
+      <option value="ai">AI 识别（Whisper / SenseVoice，更准，按用量付费）</option>
+    </select>
+  </label>
+  <label data-stt="ai">API Key
+    <input id="sttKey" type="password" autocomplete="off" placeholder="sk-...">
+  </label>
+  <label data-stt="ai">模型
+    <input id="sttModel" type="text" autocomplete="off" spellcheck="false">
+  </label>
+  <label class="wide" data-stt="ai">接口地址（OpenAI 兼容的 /audio/transcriptions）
+    <input id="sttBase" type="url" autocomplete="off" spellcheck="false">
+  </label>
+  <div class="note" data-stt="ai">
+    默认是国内的硅基流动 SenseVoice（在 <a href="https://cloud.siliconflow.cn/account/ak" target="_blank" rel="noopener">cloud.siliconflow.cn</a> 申请 Key），不需要连 Google。
+    也可以用 OpenAI：接口地址 <code>https://api.openai.com/v1</code>，模型 <code>whisper-1</code>。
+    AI 识别是一句话说完后整句识别，比浏览器自带的慢 1–3 秒，但口音、专业词更准；同时听「我 + 对方」时能分清是谁说的，也能识别你说的中文。
   </div>
-  <div class="note" data-for="openai">
-    默认是 DeepSeek（在 <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">platform.deepseek.com</a> 申请 Key）。
-    其他支持 OpenAI 接口格式的 AI 也可以用：改成它的接口地址和模型名即可。
-    API Key 只保存在本机浏览器里，只发送给上面的接口地址。
-  </div>
-</section>
+
+  <button class="done" value="ok">完成</button>
+</form>
+</dialog>
 <div class="statusbar"><div id="meter" hidden title="收到的音量"><i></i></div><div id="status"></div></div>
 <main id="list">
   <div class="empty" id="empty">
@@ -180,7 +218,7 @@
   const list = $('list'), statusEl = $('status'), micBtn = $('mic'), micLabel = $('micLabel');
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   let running = false;
-  let pipWin = null; // floating subtitle window, when open
+  let pipWin = null, pipSync = null; // floating subtitle window and its refresh, when open
 
   // ---------- settings (per-device convenience) ----------
   const store = {
@@ -192,21 +230,29 @@
     engine: store.get('engine', 'google'), fs: store.get('fs', 22), showEn: store.get('showEn', true),
     key: store.get('key', ''), model: store.get('model', 'claude-opus-5-5'), ctx: store.get('ctx', ''),
     oaiKey: store.get('oaiKey', ''), oaiModel: store.get('oaiModel', 'deepseek-v4-flash'),
-    oaiBase: store.get('oaiBase', 'https://api.deepseek.com')
+    oaiBase: store.get('oaiBase', 'https://api.deepseek.com'),
+    stt: store.get('stt', 'browser'), sttKey: store.get('sttKey', ''),
+    sttModel: store.get('sttModel', 'FunAudioLLM/SenseVoiceSmall'),
+    sttBase: store.get('sttBase', 'https://api.siliconflow.cn/v1')
   };
   if (![...$('aiModel').options].some((o) => o.value === settings.model)) settings.model = 'claude-opus-5-5';
   $('aiKey').value = settings.key; $('aiModel').value = settings.model; $('aiCtx').value = settings.ctx;
-  $('oaiKey').value = settings.oaiKey; $('oaiModel').value = settings.oaiModel; $('oaiBase').value = settings.oaiBase;
+  for (const k of ['oaiKey', 'oaiModel', 'oaiBase', 'sttKey', 'sttModel', 'sttBase']) $(k).value = settings[k];
+  $('stt').value = settings.stt;
   const isAI = () => settings.engine === 'claude' || settings.engine === 'openai';
   const aiKey = () => (settings.engine === 'claude' ? settings.key : settings.oaiKey);
-  // The AI settings panel folds away while translating so the transcript gets the screen.
-  const applyEngine = () => {
-    $('aiBox').hidden = !isAI() || (running && !!aiKey());
-    document.querySelectorAll('#aiBox [data-for]').forEach((el) => {
-      el.toggleAttribute('data-hidden', el.dataset.for !== settings.engine);
+  const applyStt = () => {
+    document.querySelectorAll('#settings [data-stt]').forEach((el) => {
+      el.toggleAttribute('data-hidden', el.dataset.stt !== settings.stt);
     });
   };
-  applyEngine();
+  applyStt();
+  const openSettings = () => { if (!$('settings').open) $('settings').showModal(); };
+  $('settingsBtn').onclick = openSettings;
+  $('stt').onchange = (e) => {
+    settings.stt = e.target.value; store.set('stt', settings.stt); applyStt();
+    if (running) { stop(); start(); }
+  };
   $('aiKey').onchange = (e) => { settings.key = e.target.value.trim(); store.set('key', settings.key); };
   $('aiModel').onchange = (e) => { settings.model = e.target.value; store.set('model', settings.model); };
   const bindText = (id, k, fallback) => {
@@ -219,6 +265,9 @@
   bindText('oaiKey', 'oaiKey', '');
   bindText('oaiModel', 'oaiModel', 'deepseek-v4-flash');
   bindText('oaiBase', 'oaiBase', 'https://api.deepseek.com');
+  bindText('sttKey', 'sttKey', '');
+  bindText('sttModel', 'sttModel', 'FunAudioLLM/SenseVoiceSmall');
+  bindText('sttBase', 'sttBase', 'https://api.siliconflow.cn/v1');
   $('aiCtx').onchange = (e) => { settings.ctx = e.target.value.trim(); store.set('ctx', settings.ctx); };
   $('srcLang').value = settings.src; $('dstLang').value = settings.dst; $('engine').value = settings.engine;
   const applyFs = () => {
@@ -242,59 +291,85 @@
   if (canSystem) {
     $('empty')?.insertAdjacentHTML('beforeend',
       '<br><br>💻 在电脑上开 Teams / Zoom 会议：左上角声音来源选 <b>电脑声音</b>，<br>'
-      + '点开始后选择会议所在的窗口或「整个屏幕」，并勾选 <b>共享音频</b>。戴耳机也能翻译。');
+      + '点开始后选择会议所在的窗口或「整个屏幕」，并勾选 <b>共享音频</b>。戴耳机也能翻译。<br>'
+      + '想把自己说的话也记下来，选 <b>电脑声音 + 我的麦克风</b>。');
   }
   $('source').onchange = (e) => { settings.source = e.target.value; store.set('source', settings.source); if (running) { stop(); start(); } };
   $('srcLang').onchange = (e) => { settings.src = e.target.value; store.set('src', settings.src); if (running) restart(); };
   $('dstLang').onchange = (e) => { settings.dst = e.target.value; store.set('dst', settings.dst); };
-  $('engine').onchange = (e) => { settings.engine = e.target.value; store.set('engine', settings.engine); applyEngine(); };
+  $('engine').onchange = (e) => {
+    settings.engine = e.target.value; store.set('engine', settings.engine);
+    if (isAI() && !aiKey()) openSettings();
+  };
   $('fsUp').onclick = () => { settings.fs = Math.min(48, settings.fs + 2); store.set('fs', settings.fs); applyFs(); };
   $('fsDown').onclick = () => { settings.fs = Math.max(14, settings.fs - 2); store.set('fs', settings.fs); applyFs(); };
   $('toggleEn').onclick = () => { settings.showEn = !settings.showEn; store.set('showEn', settings.showEn); applyEn(); };
 
   // ---------- floating subtitle window (Document Picture-in-Picture, desktop Chrome/Edge) ----------
-  // An always-on-top window mirroring the newest lines, to sit over a video or a Teams call.
+  // An always-on-top, movie-subtitle style window showing the newest lines, to sit over a
+  // video or a Teams call. It has its own start/stop and font-size buttons.
   if ('documentPictureInPicture' in window) $('pip').hidden = false;
   $('pip').onclick = async () => {
     if (pipWin) { pipWin.close(); return; }
     let w;
     try {
-      w = await documentPictureInPicture.requestWindow({ width: 520, height: 220 });
+      w = await documentPictureInPicture.requestWindow({ width: 760, height: 150 });
     } catch (e) {
       setStatus('无法打开小窗：' + e.message, true);
       return;
     }
     pipWin = w;
-    document.querySelectorAll('style').forEach((st) => w.document.head.appendChild(st.cloneNode(true)));
-    const extra = w.document.createElement('style');
+    const d = w.document;
+    document.querySelectorAll('style').forEach((st) => d.head.appendChild(st.cloneNode(true)));
+    const extra = d.createElement('style');
     extra.textContent = `
-      body { height: 100vh; padding: 0; }
-      #pipList { flex: 1; overflow-y: auto; padding: 4px 14px 10px; }
+      body { height: 100vh; padding: 0; background: #000; color: #fff; }
+      #pipBar { position: fixed; top: 4px; right: 6px; display: flex; gap: 4px; opacity: .3; transition: opacity .2s; z-index: 1; }
+      body:hover #pipBar { opacity: 1; }
+      #pipBar button { background: #222; color: #fff; border: 1px solid #444; padding: 2px 9px; font-size: 12px; }
+      #pipBar button.on { background: #b91c1c; border-color: #b91c1c; }
+      #pipList { flex: 1; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding: 6px 18px 10px; }
+      #pipList .seg { border: none; padding: 3px 0; text-align: center; }
+      #pipList .seg.me { border: none; padding-left: 0; }
+      #pipList .zh { color: #fff; font-size: calc(var(--fs) * 1.15); font-weight: 600; }
+      #pipList .en { color: #b8b8b8; }
+      #pipList .seg.live .zh, #pipList .seg.live .en { color: #9a9a9a; }
+      #pipList .seg:not(:last-child) { opacity: .55; }
       #pipList .t { display: none; }
-      #pipList .seg:last-child { border-bottom: none; }
-      #pipList .empty { margin-top: 24px; }`;
-    w.document.head.appendChild(extra);
-    w.document.title = '实时翻译';
-    w.document.documentElement.style.setProperty('--fs', settings.fs + 'px');
-    if (document.documentElement.dataset.theme) w.document.documentElement.dataset.theme = document.documentElement.dataset.theme;
-    w.document.body.classList.toggle('hide-en', !settings.showEn);
-    const box = w.document.createElement('main');
-    box.id = 'pipList';
-    w.document.body.appendChild(box);
+      #pipList .who { color: #60a5fa; font-size: .8em; margin-right: 6px; }
+      #pipList .empty { color: #9a9a9a; margin: auto; font-size: 14px; }`;
+    d.head.appendChild(extra);
+    d.title = '实时翻译字幕';
+    d.documentElement.style.setProperty('--fs', settings.fs + 'px');
+    d.body.classList.toggle('hide-en', !settings.showEn);
+    d.body.innerHTML = `<div id="pipBar"><button id="pRun"></button><button id="pDown">A−</button><button id="pUp">A+</button></div><main id="pipList"></main>`;
+    const box = d.getElementById('pipList'), run = d.getElementById('pRun');
+    run.onclick = () => micBtn.click();
+    d.getElementById('pUp').onclick = () => $('fsUp').click();
+    d.getElementById('pDown').onclick = () => $('fsDown').click();
     const render = () => {
-      const segs = [...list.querySelectorAll('.seg')].slice(-4);
+      run.textContent = running ? '■ 停止' : '▶ 开始';
+      run.classList.toggle('on', running);
+      const segs = [...list.querySelectorAll('.seg')].slice(-2);
       box.replaceChildren(...(segs.length
-        ? segs.map((el) => el.cloneNode(true))
-        : [Object.assign(w.document.createElement('div'), { className: 'empty', textContent: running ? '正在聆听…翻译会显示在这里' : '回到主页面点「开始翻译」，翻译会显示在这里' })]));
-      box.scrollTop = box.scrollHeight;
+        ? segs.map((el) => {
+          const c = el.cloneNode(true);
+          const who = el.querySelector('.t').textContent.match(/^(我|对方) · /);
+          if (who && c.querySelector('.zh').textContent) {
+            c.querySelector('.zh').prepend(Object.assign(d.createElement('span'), { className: 'who', textContent: who[1] }));
+          }
+          return c;
+        })
+        : [Object.assign(d.createElement('div'), { className: 'empty', textContent: running ? '正在聆听…翻译会显示在这里' : '点右上角「▶ 开始」，翻译会像字幕一样显示在这里' })]));
     };
     const mo = new MutationObserver(render);
     mo.observe(list, { childList: true, subtree: true, characterData: true });
+    pipSync = render;
     render();
     $('pip').textContent = '关闭小窗';
     w.addEventListener('pagehide', () => {
       mo.disconnect();
-      pipWin = null;
+      pipWin = null; pipSync = null;
       $('pip').textContent = '小窗';
     });
   };
@@ -406,7 +481,7 @@
 
   // Claude Messages API, called straight from the browser; onText gets the text so far.
   async function claude(seg, onText) {
-    if (!settings.key) throw new Error('请先在上方填写 Claude API Key');
+    if (!settings.key) throw new Error('请先在 ⚙️ 设置 里填写 Claude API Key');
     const { system, content } = buildPrompt(seg);
     const body = {
       model: settings.model, max_tokens: 2048, stream: true,
@@ -445,7 +520,7 @@
   // OpenAI-compatible chat completions (DeepSeek by default).
   async function openaiCompat(seg, onText) {
     const name = /deepseek/i.test(settings.oaiBase) ? 'DeepSeek' : 'AI';
-    if (!settings.oaiKey) throw new Error('请先在上方填写 ' + name + ' API Key');
+    if (!settings.oaiKey) throw new Error('请先在 ⚙️ 设置 里填写 ' + name + ' API Key');
     const { system, content } = buildPrompt(seg);
     const body = {
       model: settings.oaiModel, stream: true, temperature: 0.3,
@@ -468,7 +543,9 @@
   }
 
   // ---------- transcript UI ----------
-  const segments = []; // {time, en, zh}
+  const segments = []; // {time, en, zh, who}  who: 'me' | 'them' | '' (unlabelled)
+  const WHO_LABEL = { me: '我', them: '对方' };
+  const isChinese = (t) => /[\u4e00-\u9fff]/.test(t) && !/[a-z]{3}/i.test(t);
   let liveEl = null, liveText = '', liveTimer = null, liveReq = 0;
 
   function fmtTime(d) { return d.toTimeString().slice(0, 8); }
@@ -501,21 +578,35 @@
     scrollDown(stick);
   }
 
-  async function commit(text) {
+  // Finalizes one recognized sentence and translates it. By default it takes over the
+  // browser recognizer's live line; AI recognition passes its own placeholder element.
+  async function commit(text, opts = {}) {
     text = text.trim();
-    if (!text) return;
+    let el = opts.el;
+    if (!text) { el?.remove(); return; }
     const stick = nearBottom();
-    liveReq++;
-    let el = liveEl;
-    liveEl = null;
-    if (!el) { el = makeSeg(); list.appendChild(el); }
+    if (!el) {
+      liveReq++;
+      el = liveEl;
+      liveEl = null;
+      if (!el) { el = makeSeg(); list.appendChild(el); }
+    }
     el.classList.remove('live');
-    const seg = { time: new Date(), en: text, zh: '' };
+    const who = opts.who || '';
+    if (who === 'me') el.classList.add('me');
+    const seg = { time: opts.time || new Date(), en: text, zh: '', who };
     segments.push(seg);
     el.querySelector('.en').textContent = text;
-    el.querySelector('.t').textContent = fmtTime(seg.time);
+    el.querySelector('.t').textContent = (WHO_LABEL[who] ? WHO_LABEL[who] + ' · ' : '') + fmtTime(seg.time);
     scrollDown(stick);
     const zhEl = el.querySelector('.zh');
+    // My own Chinese needs no translation; show it as the main line.
+    if (who === 'me' && isChinese(text)) {
+      seg.zh = text;
+      zhEl.textContent = text;
+      el.querySelector('.en').textContent = '';
+      return;
+    }
     // Only the newest segment reports status, so a slow older request can't hide a newer error.
     const report = (msg, isErr) => { if (segments[segments.length - 1] === seg) setStatus(msg, isErr); };
     let note = '';
@@ -543,15 +634,144 @@
     scrollDown(stick);
   }
 
+  // ---------- AI speech recognition (OpenAI-compatible /audio/transcriptions) ----------
+  // A simple energy-based voice detector cuts the audio into sentences; each one is encoded
+  // as 16 kHz WAV and sent for transcription. Works with SenseVoice, Whisper, etc.
+  function encodeWav(chunks, rate) {
+    const total = chunks.reduce((n, c) => n + c.length, 0);
+    const ratio = rate / 16000, n = Math.floor(total / ratio);
+    const pcm = new Int16Array(n);
+    let ci = 0, off = 0, pos = 0;
+    for (let i = 0; i < n; i++) {
+      const target = Math.floor(i * ratio);
+      while (pos + chunks[ci].length <= target) { pos += chunks[ci].length; ci++; }
+      off = target - pos;
+      const v = Math.max(-1, Math.min(1, chunks[ci][off]));
+      pcm[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+    }
+    const buf = new ArrayBuffer(44 + pcm.byteLength), dv = new DataView(buf);
+    const str = (o, t) => [...t].forEach((c, i) => dv.setUint8(o + i, c.charCodeAt(0)));
+    str(0, 'RIFF'); dv.setUint32(4, 36 + pcm.byteLength, true); str(8, 'WAVE');
+    str(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+    dv.setUint32(24, 16000, true); dv.setUint32(28, 32000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+    str(36, 'data'); dv.setUint32(40, pcm.byteLength, true);
+    new Int16Array(buf, 44).set(pcm);
+    return new Blob([buf], { type: 'audio/wav' });
+  }
+
+  // Watches one audio stream and calls onStart() when speech begins and onEnd(wav|null) when it ends.
+  function createVad(ctx, stream, onStart, onEnd) {
+    const src = ctx.createMediaStreamSource(stream);
+    const proc = ctx.createScriptProcessor(4096, 1, 1);
+    const mute = ctx.createGain();
+    mute.gain.value = 0;
+    src.connect(proc); proc.connect(mute); mute.connect(ctx.destination);
+    const rate = ctx.sampleRate, chunkMs = 4096 / rate * 1000;
+    const preroll = Math.ceil(300 / chunkMs);
+    let noise = 0.004, speaking = false, cur = [], pre = [], silentMs = 0, speechMs = 0;
+    proc.onaudioprocess = (e) => {
+      const data = new Float32Array(e.inputBuffer.getChannelData(0));
+      let sum = 0;
+      for (const v of data) sum += v * v;
+      const rms = Math.sqrt(sum / data.length);
+      const thr = Math.max(0.008, noise * 3);
+      if (!speaking) {
+        pre.push(data);
+        if (pre.length > preroll) pre.shift();
+        if (rms > thr) {
+          speaking = true; cur = pre; pre = []; silentMs = 0; speechMs = chunkMs;
+          onStart();
+        } else {
+          noise = noise * 0.95 + rms * 0.05;
+        }
+        return;
+      }
+      cur.push(data);
+      if (rms > thr) { silentMs = 0; speechMs += chunkMs; } else silentMs += chunkMs;
+      // A sentence ends after 0.7 s of quiet, or is cut at 12 s to keep latency bounded.
+      if (silentMs > 700 || cur.length * chunkMs > 12000) {
+        speaking = false;
+        const chunks = cur;
+        cur = [];
+        onEnd(speechMs >= 300 ? encodeWav(chunks, rate) : null);
+      }
+    };
+    return () => { proc.onaudioprocess = null; try { src.disconnect(); proc.disconnect(); } catch {} };
+  }
+
+  async function transcribe(wav, who) {
+    const fd = new FormData();
+    fd.append('file', wav, 'speech.wav');
+    fd.append('model', settings.sttModel);
+    // Whisper-style models take a language hint; my own speech may be Chinese, so leave it open.
+    if (/whisper|transcribe/i.test(settings.sttModel) && who !== 'me') fd.append('language', srcCode());
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 30000);
+    inflight.add(ctl);
+    try {
+      let r;
+      try {
+        r = await fetch(settings.sttBase.replace(/\/+$/, '') + '/audio/transcriptions', {
+          method: 'POST', headers: { authorization: 'Bearer ' + settings.sttKey }, body: fd, signal: ctl.signal
+        });
+      } catch (e) {
+        if (e.name === 'AbortError') throw new Error('AI 识别响应超时');
+        throw new Error('AI 识别连接失败（网络不通，或该服务不允许网页直接调用）');
+      }
+      if (!r.ok) {
+        let detail = '';
+        try { const j = await r.json(); detail = j.error?.message || j.message || ''; } catch {}
+        const label = { 401: 'API Key 无效', 402: '余额不足', 403: '没有权限', 429: '超出速率或额度限制' }[r.status] || 'HTTP ' + r.status;
+        throw new Error('AI 识别 ' + label + (detail ? '：' + detail : ''));
+      }
+      const j = await r.json();
+      // SenseVoice may tag language/emotion/events like <|en|><|NEUTRAL|>; drop the tags.
+      return (j.text || '').replace(/<\|[^|]*\|>/g, '').trim();
+    } finally {
+      clearTimeout(timer);
+      inflight.delete(ctl);
+    }
+  }
+
+  // One VAD + transcription pipeline per input; `who` labels the speaker when both are on.
+  function startAiPipeline(ctx, stream, who) {
+    let el = null, startedAt = null;
+    const stopVad = createVad(ctx, stream, () => {
+      const stick = nearBottom();
+      el = makeSeg('live');
+      el.querySelector('.en').textContent = (WHO_LABEL[who] ? WHO_LABEL[who] + '：' : '') + '🎙️ …';
+      startedAt = new Date();
+      list.appendChild(el);
+      scrollDown(stick);
+      if (!quietShown) setStatus('听到说话了，正在识别…');
+    }, async (wav) => {
+      const mine = el, time = startedAt;
+      el = null;
+      if (!wav) { mine.remove(); return; }
+      mine.querySelector('.en').textContent = (WHO_LABEL[who] ? WHO_LABEL[who] + '：' : '') + '识别中…';
+      try {
+        const text = await transcribe(wav, who);
+        if (!mine.isConnected) return; // transcript was cleared
+        commit(text, { el: mine, who, time });
+      } catch (e) {
+        mine.remove();
+        setStatus(e.message, true);
+      }
+    });
+    // Stopping mid-sentence drops the unfinished placeholder.
+    return () => { stopVad(); el?.remove(); el = null; };
+  }
+
   // ---------- speech recognition ----------
   let rec = null, wakeLock = null, restartTimer = null, capture = null, audioTrack = null;
+  let micStream = null, audioCtx = null, recTrack = null, stopPipelines = [];
   const recStart = (r) => {
     try {
-      audioTrack ? r.start(audioTrack) : r.start();
+      recTrack ? r.start(recTrack) : r.start();
     } catch (e) {
-      if (e.name === 'InvalidStateError' && !audioTrack) return; // already running
+      if (e.name === 'InvalidStateError' && !recTrack) return; // already running
       setStatus('无法开始语音识别：' + e.message
-        + (audioTrack ? '（电脑声音模式需要电脑版 Chrome / Edge 135 以上）' : ''), true);
+        + (recTrack ? '（电脑声音模式需要电脑版 Chrome / Edge 135 以上）' : ''), true);
     }
   };
 
@@ -562,8 +782,9 @@
     : '麦克风没有收到声音：戴耳机时请把声音来源改成「电脑声音」，或把外放音量调大。');
   async function startMeter() {
     try {
-      if (!audioTrack) meterMic = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const stream = audioTrack ? new MediaStream([audioTrack]) : meterMic;
+      const track = recTrack || audioTrack || micStream?.getAudioTracks()[0];
+      if (!track) meterMic = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = track ? new MediaStream([track]) : meterMic;
       meterCtx = new AudioContext();
       await meterCtx.resume();
       const an = meterCtx.createAnalyser();
@@ -662,31 +883,74 @@
   }
 
   async function start() {
-    if (!SR) {
-      setStatus('当前浏览器不支持语音识别。请用 Chrome / Edge（电脑、安卓）或 Safari（iPhone）打开。', true);
+    const useAI = settings.stt === 'ai';
+    if (!SR && !useAI) {
+      setStatus('当前浏览器不支持语音识别。请用 Chrome / Edge（电脑、安卓）或 Safari（iPhone）打开，或在 ⚙️ 设置 里改用 AI 识别。', true);
       return;
     }
-    if (settings.source === 'system' && !(await startCapture())) return;
+    if (useAI && !settings.sttKey) {
+      openSettings();
+      setStatus('请先在 ⚙️ 设置 里填写 AI 语音识别的 API Key。', true);
+      return;
+    }
+    const src = settings.source;
+    if (src !== 'mic' && !(await startCapture())) return;
+    // The browser recognizer opens the microphone itself; AI recognition and mixing need the stream.
+    if (src === 'both' || (useAI && src === 'mic')) {
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      } catch {
+        stopCapture();
+        setStatus('拿不到麦克风：请在浏览器地址栏里允许使用麦克风。', true);
+        return;
+      }
+    }
     running = true;
-    rec = buildRec();
-    recStart(rec);
-    micBtn.classList.add('on'); micLabel.textContent = '停止'; applyEngine();
-    setStatus(audioTrack ? '正在聆听电脑声音…' : '正在聆听…');
+    audioCtx = new AudioContext();
+    try { await audioCtx.resume(); } catch {}
+    if (useAI) {
+      const label = src === 'both';
+      if (audioTrack) stopPipelines.push(startAiPipeline(audioCtx, new MediaStream([audioTrack]), label ? 'them' : ''));
+      if (micStream) stopPipelines.push(startAiPipeline(audioCtx, micStream, label ? 'me' : ''));
+    } else {
+      recTrack = audioTrack;
+      if (src === 'both') {
+        // One browser recognizer can only take one track, so mix the call audio with my microphone.
+        const mix = audioCtx.createMediaStreamDestination();
+        audioCtx.createMediaStreamSource(new MediaStream([audioTrack])).connect(mix);
+        audioCtx.createMediaStreamSource(micStream).connect(mix);
+        recTrack = mix.stream.getAudioTracks()[0];
+      }
+      rec = buildRec();
+      recStart(rec);
+    }
+    micBtn.classList.add('on'); micLabel.textContent = '停止';
+    setStatus((useAI ? 'AI 识别：' : '') + ({ mic: '正在聆听…', system: '正在聆听电脑声音…', both: '正在聆听电脑声音和我的麦克风…' })[src]);
     startMeter();
+    pipSync?.();
     try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
   }
   function stop() {
     running = false;
     clearTimeout(restartTimer);
     try { rec && rec.stop(); } catch {}
+    rec = null;
+    stopPipelines.forEach((f) => f());
+    stopPipelines = [];
     stopMeter();
     stopCapture();
-    micBtn.classList.remove('on'); micLabel.textContent = '开始翻译'; applyEngine();
+    micStream?.getTracks().forEach((t) => t.stop());
+    micStream = null; recTrack = null;
+    try { audioCtx && audioCtx.close(); } catch {}
+    audioCtx = null;
+    micBtn.classList.remove('on'); micLabel.textContent = '开始翻译';
+    pipSync?.();
     if (!statusEl.classList.contains('err')) setStatus('已停止');
     try { wakeLock && wakeLock.release(); } catch {}
     wakeLock = null;
   }
-  function restart() { try { rec && rec.abort(); } catch {} rec = buildRec(); recStart(rec); }
+  // Language change: the browser recognizer must restart; AI recognition reads it per request.
+  function restart() { if (!rec) return; try { rec.abort(); } catch {} rec = buildRec(); recStart(rec); }
 
   micBtn.onclick = () => (running ? stop() : start());
   document.addEventListener('visibilitychange', async () => {
@@ -702,7 +966,8 @@
   };
   $('export').onclick = () => {
     if (!segments.length) { setStatus('还没有内容可以导出'); return; }
-    const body = segments.map((s) => `[${fmtTime(s.time)}]\n${s.en}\n${s.zh}\n`).join('\n');
+    const body = segments.map((s) => `[${fmtTime(s.time)}]${WHO_LABEL[s.who] ? ' ' + WHO_LABEL[s.who] : ''}\n`
+      + (s.en === s.zh ? s.zh : `${s.en}\n${s.zh}`) + '\n').join('\n');
     const blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -711,7 +976,7 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
 
-  if (!SR) setStatus('当前浏览器不支持语音识别。请用 Chrome / Edge（电脑、安卓）或 Safari（iPhone）打开。', true);
+  if (!SR && settings.stt !== 'ai') setStatus('当前浏览器不支持浏览器自带的语音识别。请用 Chrome / Edge 或 Safari 打开，或在 ⚙️ 设置 里改用 AI 识别。', true);
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
