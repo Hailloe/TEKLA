@@ -85,6 +85,10 @@
 <body>
 <header>
   <h1>实时翻译</h1>
+  <select id="source" title="声音来源" hidden>
+    <option value="mic">🎤 麦克风</option>
+    <option value="system">💻 电脑声音（Teams / 视频）</option>
+  </select>
   <select id="srcLang" title="说话人语言">
     <option value="en-US">英语 (美)</option>
     <option value="en-GB">英语 (英)</option>
@@ -179,6 +183,20 @@
   const applyEn = () => document.body.classList.toggle('hide-en', !settings.showEn);
   applyFs(); applyEn();
 
+  // Desktop Chrome/Edge 135+ can run speech recognition on a captured audio track
+  // (Teams tab or system audio), so headphones work. Elsewhere only the microphone is available.
+  const chromeVer = +((navigator.userAgent.match(/Chrom(?:e|ium)\/(\d+)/) || [])[1] || 0);
+  const canSystem = chromeVer >= 135 && !/Android|Mobile/i.test(navigator.userAgent)
+    && !!navigator.mediaDevices?.getDisplayMedia;
+  settings.source = canSystem ? store.get('source', 'mic') : 'mic';
+  $('source').hidden = !canSystem;
+  $('source').value = settings.source;
+  if (canSystem) {
+    $('empty')?.insertAdjacentHTML('beforeend',
+      '<br><br>💻 在电脑上开 Teams / Zoom 会议：左上角声音来源选 <b>电脑声音</b>，<br>'
+      + '点开始后选择会议所在的窗口或「整个屏幕」，并勾选 <b>共享音频</b>。戴耳机也能翻译。');
+  }
+  $('source').onchange = (e) => { settings.source = e.target.value; store.set('source', settings.source); if (running) { stop(); start(); } };
   $('srcLang').onchange = (e) => { settings.src = e.target.value; store.set('src', settings.src); if (running) restart(); };
   $('dstLang').onchange = (e) => { settings.dst = e.target.value; store.set('dst', settings.dst); };
   $('engine').onchange = (e) => { settings.engine = e.target.value; store.set('engine', settings.engine); applyEngine(); };
@@ -388,7 +406,34 @@
   }
 
   // ---------- speech recognition ----------
-  let rec = null, wakeLock = null, restartTimer = null;
+  let rec = null, wakeLock = null, restartTimer = null, capture = null, audioTrack = null;
+  const recStart = (r) => { try { audioTrack ? r.start(audioTrack) : r.start(); } catch {} };
+
+  // Asks the user to share a tab/screen with audio; returns false if they cancel or share no audio.
+  async function startCapture() {
+    try {
+      capture = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: 1 },
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        systemAudio: 'include'
+      });
+    } catch {
+      setStatus('已取消共享。', true);
+      return false;
+    }
+    audioTrack = capture.getAudioTracks()[0] || null;
+    if (!audioTrack) {
+      stopCapture();
+      setStatus('没有共享到声音。请重新开始，共享时勾选「共享标签页音频」或「共享系统音频」。', true);
+      return false;
+    }
+    audioTrack.onended = () => { if (running) stop(); };
+    return true;
+  }
+  function stopCapture() {
+    capture?.getTracks().forEach((t) => t.stop());
+    capture = null; audioTrack = null;
+  }
 
   function buildRec() {
     const r = new SR();
@@ -420,7 +465,7 @@
     r.onend = () => {
       if (liveEl && liveText) commit(liveText);
       liveText = '';
-      if (running && r === rec) { clearTimeout(restartTimer); restartTimer = setTimeout(() => { try { r.start(); } catch {} }, 250); }
+      if (running && r === rec) { clearTimeout(restartTimer); restartTimer = setTimeout(() => recStart(r), 250); }
     };
     return r;
   }
@@ -430,23 +475,25 @@
       setStatus('当前浏览器不支持语音识别。请用 Chrome / Edge（电脑、安卓）或 Safari（iPhone）打开。', true);
       return;
     }
+    if (settings.source === 'system' && !(await startCapture())) return;
     running = true;
     rec = buildRec();
-    try { rec.start(); } catch {}
+    recStart(rec);
     micBtn.classList.add('on'); micLabel.textContent = '停止'; applyEngine();
-    setStatus('正在聆听…');
+    setStatus(audioTrack ? '正在聆听电脑声音…' : '正在聆听…');
     try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
   }
   function stop() {
     running = false;
     clearTimeout(restartTimer);
     try { rec && rec.stop(); } catch {}
+    stopCapture();
     micBtn.classList.remove('on'); micLabel.textContent = '开始翻译'; applyEngine();
     if (!statusEl.classList.contains('err')) setStatus('已停止');
     try { wakeLock && wakeLock.release(); } catch {}
     wakeLock = null;
   }
-  function restart() { try { rec && rec.abort(); } catch {} rec = buildRec(); try { rec.start(); } catch {} }
+  function restart() { try { rec && rec.abort(); } catch {} rec = buildRec(); recStart(rec); }
 
   micBtn.onclick = () => (running ? stop() : start());
   document.addEventListener('visibilitychange', async () => {
