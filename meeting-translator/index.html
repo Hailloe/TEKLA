@@ -306,6 +306,14 @@
     <label class="row stack"><span data-i18n="ctxLabel"></span><input id="aiCtx" type="text" data-i18n-ph="ctxPh"></label>
   </div>
 
+  <div class="group-title" data-i18n="grpMic"></div>
+  <div class="group">
+    <label class="row"><span data-i18n="lblMic"></span>
+      <select id="micDevice"><option value="" data-i18n="micDefault"></option></select>
+    </label>
+  </div>
+  <p class="foot" data-i18n="noteMic"></p>
+
   <div class="group-title" data-i18n="grpStt"></div>
   <div class="group">
     <label class="row"><span data-i18n="sttMethod"></span>
@@ -369,6 +377,9 @@
       grpOai: 'DeepSeek / 其他 AI', baseUrl: '接口地址（OpenAI 兼容）',
       noteOai: '翻译引擎选「DeepSeek / 其他 AI」时使用。默认是 DeepSeek（在 <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">platform.deepseek.com</a> 申请 Key）。通义千问、Kimi 等支持 OpenAI 接口格式的 AI，改成它们的接口地址和模型名即可。',
       grpCtx: '会议', ctxLabel: '主题 / 专有名词（可选，让 AI 翻得更准）', ctxPh: '例如：钢结构项目周会；Tekla、BIM、RFI',
+      grpMic: '麦克风', lblMic: '用哪个麦克风', micDefault: '系统默认', micN: (n) => '麦克风 ' + n,
+      noteMic: '例如戴蓝牙耳机时，选手机自带的麦克风来听对方说话。用 AI 识别时手机、电脑都有效；用浏览器自带识别时只有电脑版 Chrome / Edge 有效，手机上由系统决定。',
+      micFallback: '选的麦克风现在不可用，已改用系统默认麦克风。',
       grpStt: '语音识别', sttMethod: '识别方式', sttBrowser: '浏览器自带（免费）', sttAi: 'AI 识别（更准）',
       sttDesktopNA: '（桌面版不可用）', sttBaseLbl: '接口地址（/audio/transcriptions）',
       noteStt: '默认是国内的硅基流动 SenseVoice（在 <a href="https://cloud.siliconflow.cn/account/ak" target="_blank" rel="noopener">cloud.siliconflow.cn</a> 申请 Key），不需要连 Google。也可以用 OpenAI：接口地址 <code>https://api.openai.com/v1</code>，模型 <code>whisper-1</code>。一句话说完后整句识别，比浏览器自带的慢 1–3 秒，但口音、专业词更准；同时听「我 + 对方」时能分清是谁说的。',
@@ -426,6 +437,9 @@
       grpOai: 'DeepSeek / other AI', baseUrl: 'Base URL (OpenAI-compatible)',
       noteOai: 'Used when the engine is "DeepSeek / other AI". Defaults to DeepSeek (get a key at <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">platform.deepseek.com</a>). Any OpenAI-compatible AI such as Qwen or Kimi works: change the base URL and model.',
       grpCtx: 'Meeting', ctxLabel: 'Topic & terms (optional, helps the AI)', ctxPh: 'e.g. steel structure weekly meeting; Tekla, BIM, RFI',
+      grpMic: 'Microphone', lblMic: 'Microphone', micDefault: 'System default', micN: (n) => 'Microphone ' + n,
+      noteMic: "For example, with Bluetooth earbuds choose the phone's own microphone to hear the other person. Works on phones and computers with AI recognition; with the built-in browser recognizer only on desktop Chrome / Edge (on phones the system decides).",
+      micFallback: 'The chosen microphone is unavailable; using the system default.',
       grpStt: 'Speech recognition', sttMethod: 'Method', sttBrowser: 'Built-in browser (free)', sttAi: 'AI recognition (more accurate)',
       sttDesktopNA: ' (not in desktop app)', sttBaseLbl: 'Base URL (/audio/transcriptions)',
       noteStt: 'Defaults to SiliconFlow SenseVoice (get a key at <a href="https://cloud.siliconflow.cn/account/ak" target="_blank" rel="noopener">cloud.siliconflow.cn</a>), no Google needed. OpenAI also works: base URL <code>https://api.openai.com/v1</code>, model <code>whisper-1</code>. Each sentence is recognized when it ends, 1–3 s slower than the built-in recognizer but better with accents and jargon; with "me + them" it tells the two sides apart.',
@@ -476,7 +490,8 @@
     oaiBase: store.get('oaiBase', 'https://api.deepseek.com'),
     stt: store.get('stt', 'browser'), sttKey: store.get('sttKey', ''),
     sttModel: store.get('sttModel', 'FunAudioLLM/SenseVoiceSmall'),
-    sttBase: store.get('sttBase', 'https://api.siliconflow.cn/v1')
+    sttBase: store.get('sttBase', 'https://api.siliconflow.cn/v1'),
+    micId: store.get('micId', '')
   };
   if (![...$('aiModel').options].some((o) => o.value === settings.model)) settings.model = 'claude-opus-5-5';
   // Desktop subtitle app (Electron): the browser's built-in recognizer has no speech service
@@ -499,7 +514,38 @@
     });
   };
   applyStt();
-  const openSettings = () => { if (!$('settings').open) $('settings').showModal(); };
+  const openSettings = () => { if (!$('settings').open) { $('settings').showModal(); fillMics(false); } };
+
+  // Microphone picker. Device names are only visible after microphone permission, so the
+  // list asks for it the first time someone opens the picker.
+  async function fillMics(askPermission) {
+    const sel = $('micDevice');
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    const list = async () => (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
+    let devs = await list();
+    if (askPermission && devs.every((d) => !d.label)) {
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+        s.getTracks().forEach((t) => t.stop());
+        devs = await list();
+      } catch {}
+    }
+    const opts = [new Option(T('micDefault'), '')];
+    opts[0].dataset.i18n = 'micDefault';
+    devs.filter((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications')
+      .forEach((d, i) => opts.push(new Option(d.label || T('micN', i + 1), d.deviceId)));
+    sel.replaceChildren(...opts);
+    sel.value = settings.micId;
+    if (sel.value !== settings.micId) sel.value = ''; // device not connected right now
+    sel.dataset.filled = devs.some((d) => d.label) ? '1' : '';
+  }
+  $('micDevice').addEventListener('pointerdown', () => { if (!$('micDevice').dataset.filled) fillMics(true); });
+  $('micDevice').addEventListener('focus', () => { if (!$('micDevice').dataset.filled) fillMics(true); });
+  navigator.mediaDevices?.addEventListener?.('devicechange', () => fillMics(false));
+  $('micDevice').onchange = (e) => {
+    settings.micId = e.target.value; store.set('micId', settings.micId);
+    if (running) { stop(); start(); }
+  };
   $('settingsBtn').onclick = openSettings;
   $('stt').onchange = (e) => {
     settings.stt = e.target.value; store.set('stt', settings.stt); applyStt();
@@ -1031,7 +1077,7 @@
       startedAt = new Date();
       list.appendChild(el);
       scrollDown(stick);
-      if (!quietShown) setStatus(T('heard'));
+      if (!quietShown && !statusEl.classList.contains('err')) setStatus(T('heard'));
     }, async (wav) => {
       const mine = el, time = startedAt;
       el = null;
@@ -1066,10 +1112,25 @@
   let meterCtx = null, meterMic = null, meterTimer = null, quietSince = 0, quietShown = false;
   const QUIET_MSG = () => (audioTrack
     ? T('quietSystem') : T('quietMic'));
+  // Opens the chosen microphone, falling back to the system default if it is gone.
+  let micFellBack = false;
+  async function openMic(extra = {}) {
+    micFellBack = false;
+    if (settings.micId) {
+      try {
+        return await navigator.mediaDevices.getUserMedia({ audio: { ...extra, deviceId: { exact: settings.micId } } });
+      } catch (e) {
+        if (e.name === 'NotAllowedError') throw e;
+        micFellBack = true;
+      }
+    }
+    return navigator.mediaDevices.getUserMedia({ audio: Object.keys(extra).length ? extra : true });
+  }
+
   async function startMeter() {
     try {
       const track = recTrack || audioTrack || micStream?.getAudioTracks()[0];
-      if (!track) meterMic = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!track) meterMic = await openMic();
       const stream = track ? new MediaStream([track]) : meterMic;
       meterCtx = new AudioContext();
       await meterCtx.resume();
@@ -1146,7 +1207,7 @@
       }
       if (interim.trim()) showLive(interim.trim());
     };
-    r.onspeechstart = () => { if (!quietShown) setStatus(T('heard')); };
+    r.onspeechstart = () => { if (!quietShown && !statusEl.classList.contains('err')) setStatus(T('heard')); };
     r.onerror = (ev) => {
       if (ev.error === 'no-speech' || ev.error === 'aborted') return;
       if (ev.error === 'audio-capture') { setStatus(T('audioCapture'), true); return; }
@@ -1181,10 +1242,12 @@
     }
     const src = settings.source;
     if (src !== 'mic' && !(await startCapture())) return;
-    // The browser recognizer opens the microphone itself; AI recognition and mixing need the stream.
-    if (src === 'both' || (useAI && src === 'mic')) {
+    // The browser recognizer opens the default microphone itself; AI recognition, mixing and a
+    // chosen microphone (desktop Chrome/Edge can feed it to the recognizer) need the stream.
+    const pickedMicForBrowser = !useAI && src === 'mic' && settings.micId && canSystem;
+    if (src === 'both' || (useAI && src === 'mic') || pickedMicForBrowser) {
       try {
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+        micStream = await openMic({ echoCancellation: true, noiseSuppression: true });
       } catch {
         stopCapture();
         setStatus(T('micUnavailable'), true);
@@ -1200,6 +1263,7 @@
       if (micStream) stopPipelines.push(startAiPipeline(audioCtx, micStream, label ? 'me' : ''));
     } else {
       recTrack = audioTrack;
+      if (src === 'mic' && micStream) recTrack = micStream.getAudioTracks()[0];
       if (src === 'both') {
         // One browser recognizer can only take one track, so mix the call audio with my microphone.
         const mix = audioCtx.createMediaStreamDestination();
@@ -1212,6 +1276,7 @@
     }
     micBtn.classList.add('on'); micLabel.textContent = T('micStop');
     setStatus((useAI ? T('aiPrefix') : '') + T({ mic: 'listening', system: 'listeningSystem', both: 'listeningBoth' }[src]));
+    if (micFellBack) setStatus(T('micFallback'), true);
     startMeter();
     pipSync?.(); desktopSync?.();
     try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
