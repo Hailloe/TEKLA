@@ -251,6 +251,12 @@
       <option value="zh-TW" data-i18n="l_zh-TW"></option>
     </select></div>
   </label>
+  <label class="field"><span data-i18n="lblDir"></span>
+    <div class="select"><select id="dir">
+      <option value="one" data-i18n="dirOne"></option>
+      <option value="two" data-i18n="dirTwo"></option>
+    </select></div>
+  </label>
   <label class="field"><span data-i18n="lblEngine"></span>
     <div class="select"><select id="engine">
       <option value="claude" data-i18n="engClaude"></option>
@@ -359,7 +365,7 @@
       appName: '实时翻译', appSub: '会议 · 视频 · 电视',
       tipSettings: '设置：API Key、AI 语音识别、会议专有名词',
       lblSource: '声音来源', srcMic: '🎤 麦克风', srcSystem: '💻 电脑声音（Teams / 视频）', srcBoth: '💻+🎤 电脑声音 + 我的麦克风',
-      lblFrom: '说话语言', lblTo: '翻译成', lblEngine: '翻译引擎',
+      lblFrom: '说话语言', lblTo: '翻译成', lblEngine: '翻译引擎', lblDir: '翻译方向', dirOne: '单向（外语 → 中文）', dirTwo: '双向（外语 ⇄ 中文）', needTwoAi: '双向翻译需要 AI 语音识别：请在「设置 → 语音识别」选 AI 识别并填写 Key。',
       'l_en-US': '英语（美）', 'l_en-GB': '英语（英）', 'l_en-AU': '英语（澳）', 'l_en-IN': '英语（印）', 'l_en-SG': '英语（新加坡）',
       'l_th-TH': '泰语', 'l_ja-JP': '日语', 'l_ko-KR': '韩语', 'l_vi-VN': '越南语', 'l_ms-MY': '马来语', 'l_id-ID': '印尼语',
       'l_fr-FR': '法语', 'l_de-DE': '德语', 'l_es-ES': '西班牙语', 'l_zh-CN': '简体中文', 'l_zh-TW': '繁體中文',
@@ -384,6 +390,7 @@
       sttDesktopNA: '（桌面版不可用）', sttBaseLbl: '接口地址（/audio/transcriptions）',
       noteStt: '默认是国内的硅基流动 SenseVoice（在 <a href="https://cloud.siliconflow.cn/account/ak" target="_blank" rel="noopener">cloud.siliconflow.cn</a> 申请 Key），不需要连 Google。也可以用 OpenAI：接口地址 <code>https://api.openai.com/v1</code>，模型 <code>whisper-1</code>。一句话说完后整句识别，比浏览器自带的慢 1–3 秒，但口音、专业词更准；同时听「我 + 对方」时能分清是谁说的。',
       emptyWeb: '点击下方 <b>开始翻译</b>，允许使用麦克风。<br>开会、看电视、看视频都可以：把手机或电脑放在能听清声音的位置。<br>推荐 Chrome / Edge（电脑、安卓）或 Safari（iPhone）。',
+      emptyPhone: '<br><br>📞 <b>iPhone 打普通电话</b>：iOS 不允许网页或 App 获取通话声音，所以请用第二台设备（iPad / 电脑 / 另一部手机）打开本页，声音来源选麦克风。打电话的 iPhone <b>开免提</b>，放在这台设备旁边；对方的话会被翻译。',
       emptySystem: '<br><br>💻 电脑上开 Teams / Zoom 会议：声音来源选 <b>电脑声音</b>，开始后选会议所在的窗口或「整个屏幕」，并打开 <b>共享音频</b>，戴耳机也能翻译。想把自己说的话也记下来，选 <b>电脑声音 + 我的麦克风</b>。',
       emptyDesktop: '桌面字幕版：翻译会显示在一层透明字幕里，浮在所有程序上面。<br>1. 先点右上角 <b>设置</b>，填好 AI 语音识别的 Key<br>2. 声音来源选 <b>电脑声音</b>，或加上 <b>我的麦克风</b><br>3. 点 <b>开始翻译</b>。<b>Ctrl+Shift+L</b> 解锁字幕层后可拖动、调大小，<b>Ctrl+Shift+H</b> 隐藏 / 显示',
       pipTitle: '实时翻译字幕', pipStart: '▶ 开始', pipStop: '■ 停止',
@@ -419,7 +426,7 @@
       appName: 'Live Translate', appSub: 'Meetings · Video · TV',
       tipSettings: 'Settings: API keys, AI speech recognition, meeting terms',
       lblSource: 'Audio source', srcMic: '🎤 Microphone', srcSystem: '💻 Computer audio (Teams / video)', srcBoth: '💻+🎤 Computer audio + my mic',
-      lblFrom: 'Spoken language', lblTo: 'Translate to', lblEngine: 'Translation engine',
+      lblFrom: 'Spoken language', lblTo: 'Translate to', lblEngine: 'Translation engine', lblDir: 'Direction', dirOne: 'One-way (foreign → Chinese)', dirTwo: 'Two-way (foreign ⇄ Chinese)', needTwoAi: 'Two-way translation needs AI speech recognition: choose AI in Settings → Speech recognition and enter a key.',
       'l_en-US': 'English (US)', 'l_en-GB': 'English (UK)', 'l_en-AU': 'English (Australia)', 'l_en-IN': 'English (India)', 'l_en-SG': 'English (Singapore)',
       'l_th-TH': 'Thai', 'l_ja-JP': 'Japanese', 'l_ko-KR': 'Korean', 'l_vi-VN': 'Vietnamese', 'l_ms-MY': 'Malay', 'l_id-ID': 'Indonesian',
       'l_fr-FR': 'French', 'l_de-DE': 'German', 'l_es-ES': 'Spanish', 'l_zh-CN': 'Simplified Chinese', 'l_zh-TW': 'Traditional Chinese',
@@ -444,6 +451,7 @@
       sttDesktopNA: ' (not in desktop app)', sttBaseLbl: 'Base URL (/audio/transcriptions)',
       noteStt: 'Defaults to SiliconFlow SenseVoice (get a key at <a href="https://cloud.siliconflow.cn/account/ak" target="_blank" rel="noopener">cloud.siliconflow.cn</a>), no Google needed. OpenAI also works: base URL <code>https://api.openai.com/v1</code>, model <code>whisper-1</code>. Each sentence is recognized when it ends, 1–3 s slower than the built-in recognizer but better with accents and jargon; with "me + them" it tells the two sides apart.',
       emptyWeb: 'Tap <b>Start</b> below and allow the microphone.<br>Works for meetings, TV and videos: place your phone or computer where it can hear clearly.<br>Best in Chrome / Edge (desktop, Android) or Safari (iPhone).',
+      emptyPhone: '<br><br>📞 <b>Regular iPhone calls</b>: iOS does not let web pages or apps capture call audio, so open this page on a second device (iPad / computer / another phone) with the microphone source. Put the calling iPhone on <b>speaker</b> next to it; the other side will be translated.',
       emptySystem: '<br><br>💻 Teams / Zoom on this computer: set the audio source to <b>Computer audio</b>, then pick the meeting window or "Entire screen" and turn on <b>Share audio</b>; works with headphones. To record what you say too, choose <b>Computer audio + my mic</b>.',
       emptyDesktop: 'Desktop subtitles: translations appear in a transparent layer above every program.<br>1. Open <b>Settings</b> (top right) and enter the AI speech recognition key<br>2. Set the audio source to <b>Computer audio</b>, optionally with <b>my mic</b><br>3. Press <b>Start</b>. <b>Ctrl+Shift+L</b> unlocks the overlay to move / resize it, <b>Ctrl+Shift+H</b> hides / shows it',
       pipTitle: 'Live subtitles', pipStart: '▶ Start', pipStop: '■ Stop',
@@ -484,7 +492,7 @@
 
   const settings = {
     src: store.get('src', 'en-US'), dst: store.get('dst', 'zh-CN'),
-    engine: store.get('engine', 'google'), fs: store.get('fs', 22), showEn: store.get('showEn', true),
+    engine: store.get('engine', 'google'), twoWay: store.get('twoWay', false), fs: store.get('fs', 22), showEn: store.get('showEn', true),
     key: store.get('key', ''), model: store.get('model', 'claude-opus-5-5'), ctx: store.get('ctx', ''),
     oaiKey: store.get('oaiKey', ''), oaiModel: store.get('oaiModel', 'deepseek-v4-flash'),
     oaiBase: store.get('oaiBase', 'https://api.deepseek.com'),
@@ -567,7 +575,7 @@
   bindText('sttModel', 'sttModel', 'FunAudioLLM/SenseVoiceSmall');
   bindText('sttBase', 'sttBase', 'https://api.siliconflow.cn/v1');
   $('aiCtx').onchange = (e) => { settings.ctx = e.target.value.trim(); store.set('ctx', settings.ctx); };
-  $('srcLang').value = settings.src; $('dstLang').value = settings.dst; $('engine').value = settings.engine;
+  $('srcLang').value = settings.src; $('dstLang').value = settings.dst; $('engine').value = settings.engine; $('dir').value = settings.twoWay ? 'two' : 'one';
   const applyFs = () => {
     document.documentElement.style.setProperty('--fs', settings.fs + 'px');
     pipWin?.document.documentElement.style.setProperty('--fs', settings.fs + 'px');
@@ -589,10 +597,11 @@
   $('sourceField').hidden = !canSystem;
   $('source').value = settings.source;
   $('empty').dataset.i18nHtml = desktop ? 'emptyDesktop' : 'emptyWeb';
-  if (!desktop && canSystem) $('empty').dataset.i18nHtmlExtra = 'emptySystem';
+  $('empty').dataset.i18nHtmlExtra = desktop ? '' : (canSystem ? 'emptyPhone,emptySystem' : 'emptyPhone');
   $('source').onchange = (e) => { settings.source = e.target.value; store.set('source', settings.source); if (running) { stop(); start(); } };
   $('srcLang').onchange = (e) => { settings.src = e.target.value; store.set('src', settings.src); if (running) restart(); };
   $('dstLang').onchange = (e) => { settings.dst = e.target.value; store.set('dst', settings.dst); };
+  $('dir').onchange = (e) => { settings.twoWay = e.target.value === 'two'; store.set('twoWay', settings.twoWay); if (running) { stop(); start(); } };
   $('engine').onchange = (e) => {
     settings.engine = e.target.value; store.set('engine', settings.engine);
     if (isAI() && !aiKey()) openSettings();
@@ -703,31 +712,31 @@
   // ---------- translation ----------
   const cache = new Map();
   const srcCode = () => settings.src.split('-')[0];
-  async function translate(text) {
+  async function translate(text, rev) {
     text = text.trim();
     if (!text) return '';
     const order = settings.engine === 'mymemory' ? [mymemory, google] : [google, mymemory];
-    const key = order[0].name + '|' + settings.src + '|' + settings.dst + '|' + text;
+    const key = order[0].name + '|' + settings.src + '|' + settings.dst + '|' + (rev ? 'R|' : '') + text;
     if (cache.has(key)) return cache.get(key);
     let lastErr;
     for (const fn of order) {
       try {
-        const out = await fn(text, settings.dst);
+        const out = await fn(text, settings.dst, rev);
         if (out) { cache.set(key, out); return out; }
       } catch (e) { lastErr = e; }
     }
     throw lastErr || new Error(T('translateFail'));
   }
-  async function google(text, dst) {
-    const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=' + srcCode() + '&tl='
-      + encodeURIComponent(dst) + '&q=' + encodeURIComponent(text);
+  async function google(text, dst, rev) {
+    const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=' + (rev ? encodeURIComponent(dst) : srcCode()) + '&tl='
+      + (rev ? srcCode() : encodeURIComponent(dst)) + '&q=' + encodeURIComponent(text);
     const r = await fetch(url);
     if (!r.ok) throw new Error('Google ' + r.status);
     const j = await r.json();
     return (j[0] || []).map((p) => p[0]).join('');
   }
-  async function mymemory(text, dst) {
-    const url = 'https://api.mymemory.translated.net/get?langpair=' + srcCode() + '|' + encodeURIComponent(dst)
+  async function mymemory(text, dst, rev) {
+    const url = 'https://api.mymemory.translated.net/get?langpair=' + (rev ? encodeURIComponent(dst) + '|' + srcCode() : srcCode() + '|' + encodeURIComponent(dst))
       + '&q=' + encodeURIComponent(text.slice(0, 480));
     const r = await fetch(url);
     if (!r.ok) throw new Error('MyMemory ' + r.status);
@@ -741,8 +750,9 @@
 
   // System prompt and user message shared by the AI engines.
   function buildPrompt(seg) {
-    const srcName = LANG_NAMES[srcCode()] || settings.src;
-    const dstName = settings.dst === 'zh-TW' ? 'Traditional Chinese (繁體中文)' : 'Simplified Chinese (简体中文)';
+    const foreignName = LANG_NAMES[srcCode()] || settings.src;
+    const zhName = settings.dst === 'zh-TW' ? 'Traditional Chinese (繁體中文)' : 'Simplified Chinese (简体中文)';
+    const srcName = seg.rev ? zhName : foreignName, dstName = seg.rev ? foreignName : zhName;
     let system = `You are a professional live interpreter. Each user message contains one new segment of a live speech-recognition transcript in ${srcName}. Translate it into natural, fluent ${dstName}, the way a skilled human interpreter would say it. Speech recognition sometimes mishears words or splits sentences oddly; use the recent context to infer what the speaker meant. Reply with only the translation of the new segment - no quotes, notes, or original text.`;
     if (settings.ctx) system += `\n\nBackground and terminology from the listener:\n${settings.ctx}`;
     // Earlier segments still being translated are included as source text only.
@@ -926,7 +936,7 @@
     el.classList.remove('live');
     const who = opts.who || '';
     if (who === 'me') el.classList.add('me');
-    const seg = { time: opts.time || new Date(), en: text, zh: '', who };
+    const seg = { time: opts.time || new Date(), en: text, zh: '', who, rev: settings.twoWay && isChinese(text) && !/[\u3040-\u30ff\uac00-\ud7af]/.test(text) };
     segments.push(seg);
     el.querySelector('.en').textContent = text;
     if (who) el.dataset.who = who;
@@ -935,7 +945,7 @@
     scrollDown(stick);
     const zhEl = el.querySelector('.zh');
     // My own Chinese needs no translation; show it as the main line.
-    if (who === 'me' && isChinese(text)) {
+    if (who === 'me' && isChinese(text) && !settings.twoWay) {
       seg.zh = text;
       zhEl.textContent = text;
       el.querySelector('.en').textContent = '';
@@ -958,7 +968,7 @@
       }
     }
     try {
-      seg.zh = await translate(text);
+      seg.zh = await translate(text, seg.rev);
       zhEl.textContent = seg.zh;
       report(note || (running ? T('listening') : ''), !!note);
     } catch (e) {
@@ -1038,7 +1048,7 @@
     fd.append('file', wav, 'speech.wav');
     fd.append('model', settings.sttModel);
     // Whisper-style models take a language hint; my own speech may be Chinese, so leave it open.
-    if (/whisper|transcribe/i.test(settings.sttModel) && who !== 'me') fd.append('language', srcCode());
+    if (/whisper|transcribe/i.test(settings.sttModel) && who !== 'me' && !settings.twoWay) fd.append('language', srcCode());
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 30000);
     inflight.add(ctl);
@@ -1231,6 +1241,11 @@
 
   async function start() {
     const useAI = settings.stt === 'ai';
+    if (settings.twoWay && !useAI) {
+      openSettings();
+      setStatus(T('needTwoAi'), true);
+      return;
+    }
     if (!SR && !useAI) {
       setStatus(T('noSR'), true);
       return;
@@ -1335,7 +1350,7 @@
       el.textContent = T(el.dataset.i18n) + (el.dataset.i18nSuffix ? T(el.dataset.i18nSuffix) : '');
     });
     document.querySelectorAll('[data-i18n-html]').forEach((el) => {
-      el.innerHTML = T(el.dataset.i18nHtml) + (el.dataset.i18nHtmlExtra ? T(el.dataset.i18nHtmlExtra) : '');
+      el.innerHTML = T(el.dataset.i18nHtml) + (el.dataset.i18nHtmlExtra ? el.dataset.i18nHtmlExtra.split(',').map((k) => T(k)).join('') : '');
     });
     document.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = T(el.dataset.i18nTitle); el.setAttribute('aria-label', el.title); });
     document.querySelectorAll('[data-i18n-ph]').forEach((el) => { el.placeholder = T(el.dataset.i18nPh); });
