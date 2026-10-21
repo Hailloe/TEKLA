@@ -1012,7 +1012,7 @@
 
   // Watches one audio stream and calls onStart() when speech begins and onEnd(wav|null) when it ends.
   function createVad(ctx, stream, onStart, onEnd) {
-    const src = ctx.createMediaStreamSource(stream);
+    const src = sourceFor(stream);
     const proc = ctx.createScriptProcessor(4096, 1, 1);
     const mute = ctx.createGain();
     mute.gain.value = 0;
@@ -1039,15 +1039,17 @@
       }
       cur.push(data);
       if (rms > thr) { silentMs = 0; speechMs += chunkMs; } else silentMs += chunkMs;
-      // A sentence ends after 0.7 s of quiet, or is cut at 12 s to keep latency bounded.
-      if (silentMs > 700 || cur.length * chunkMs > 12000) {
+      // A sentence ends after 0.7 s of quiet. Fast speakers rarely pause that long, so after 6 s
+      // a short 0.3 s pause is enough; 15 s is the hard cut to keep latency bounded.
+      const lenMs = cur.length * chunkMs;
+      if (silentMs > (lenMs > 6000 ? 300 : 700) || lenMs > 15000) {
         speaking = false;
         const chunks = cur;
         cur = [];
         onEnd(speechMs >= 300 ? encodeWav(chunks, rate) : null);
       }
     };
-    return () => { proc.onaudioprocess = null; try { src.disconnect(); proc.disconnect(); } catch {} };
+    return () => { proc.onaudioprocess = null; try { src.disconnect(proc); proc.disconnect(); } catch {} };
   }
 
   async function transcribe(wav, who) {
@@ -1125,8 +1127,38 @@
     }
   };
 
+  // One AudioContext for the whole page, resumed straight from the Start tap: iOS Safari only lets
+  // audio start inside the tap, and a context created after awaiting the microphone can stay
+  // suspended (silent) on the second and later starts.
+  let sharedCtx = null;
+  function getAudioCtx() {
+    if (!sharedCtx || sharedCtx.state === 'closed') sharedCtx = new AudioContext();
+    sharedCtx.resume().catch(() => {});
+    return sharedCtx;
+  }
+  // Nodes connected for one run, disconnected on stop since the context is kept.
+  let runNodes = [];
+  // One source node per microphone / shared-audio track: a second source for the same track in
+  // the same context gets an almost silent signal (seen in Chrome), which broke the volume meter.
+  const runSources = new Map();
+  function sourceFor(stream) {
+    const track = stream.getAudioTracks()[0];
+    let node = runSources.get(track);
+    if (!node) {
+      node = getAudioCtx().createMediaStreamSource(stream);
+      runSources.set(track, node);
+      runNodes.push(node);
+    }
+    return node;
+  }
+
   // Volume meter, so it is obvious whether any sound reaches the page at all.
-  let meterCtx = null, meterMic = null, meterTimer = null, quietSince = 0, quietShown = false;
+  let meterMic = null, meterTimer = null, quietSince = 0, quietShown = false;
+  // Any sign of sound (meter level, recognized words) clears the "hears nothing" warning.
+  function markSound() {
+    quietSince = Date.now();
+    if (quietShown) { quietShown = false; setStatus(T('soundBack')); }
+  }
   const QUIET_MSG = () => (audioTrack
     ? T('quietSystem') : T('quietMic'));
   // Opens the chosen microphone, falling back to the system default if it is gone.
@@ -1149,11 +1181,11 @@
       const track = recTrack || audioTrack || micStream?.getAudioTracks()[0];
       if (!track) meterMic = await openMic();
       const stream = track ? new MediaStream([track]) : meterMic;
-      meterCtx = new AudioContext();
-      await meterCtx.resume();
-      const an = meterCtx.createAnalyser();
+      const ctx = getAudioCtx();
+      const an = ctx.createAnalyser();
       an.fftSize = 1024;
-      meterCtx.createMediaStreamSource(stream).connect(an);
+      sourceFor(stream).connect(an);
+      runNodes.push(an);
       const buf = new Float32Array(an.fftSize);
       const bar = $('meter').firstElementChild;
       $('meter').hidden = false;
@@ -1165,8 +1197,7 @@
         const level = Math.min(1, Math.sqrt(sum / buf.length) * 8);
         bar.style.width = Math.round(level * 100) + '%';
         if (level > 0.04) {
-          quietSince = Date.now();
-          if (quietShown) { quietShown = false; setStatus(T('soundBack')); }
+          markSound();
         } else if (!quietShown && Date.now() - quietSince > 6000) {
           quietShown = true;
           setStatus(QUIET_MSG(), true);
@@ -1176,8 +1207,6 @@
   }
   function stopMeter() {
     clearInterval(meterTimer); meterTimer = null;
-    try { meterCtx && meterCtx.close(); } catch {}
-    meterCtx = null;
     meterMic?.getTracks().forEach((t) => t.stop());
     meterMic = null;
     $('meter').hidden = true;
@@ -1209,13 +1238,18 @@
     capture = null; audioTrack = null;
   }
 
+  // Resolves when the last recognizer has fully ended; iOS cannot start a new one before that.
+  let recEnded = Promise.resolve();
   function buildRec() {
     const r = new SR();
+    let markEnded;
+    recEnded = new Promise((res) => (markEnded = res));
     r.lang = settings.src;
     r.continuous = true;
     r.interimResults = true;
     r.maxAlternatives = 1;
     r.onresult = (ev) => {
+      markSound();
       let interim = '';
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const res = ev.results[i];
@@ -1238,15 +1272,18 @@
       }
     };
     // Browsers end recognition after silence or ~60s; restart while the user wants it on.
+    // Restart right away: words spoken while it is down are lost.
     r.onend = () => {
+      markEnded();
       if (liveEl && liveText) commit(liveText);
       liveText = '';
-      if (running && r === rec) { clearTimeout(restartTimer); restartTimer = setTimeout(() => recStart(r), 250); }
+      if (running && r === rec) { clearTimeout(restartTimer); restartTimer = setTimeout(() => recStart(r), 30); }
     };
     return r;
   }
 
   async function start() {
+    getAudioCtx(); // must happen inside the Start tap, before any await
     const useAI = settings.stt === 'ai';
     if (settings.twoWay && !useAI) {
       openSettings();
@@ -1276,8 +1313,10 @@
         return;
       }
     }
+    // Wait (briefly) for the previous recognizer to let go of the microphone.
+    if (!useAI) await Promise.race([recEnded, new Promise((res) => setTimeout(res, 1500))]);
     running = true;
-    audioCtx = new AudioContext();
+    audioCtx = getAudioCtx();
     try { await audioCtx.resume(); } catch {}
     if (useAI) {
       const label = src === 'both';
@@ -1289,8 +1328,8 @@
       if (src === 'both') {
         // One browser recognizer can only take one track, so mix the call audio with my microphone.
         const mix = audioCtx.createMediaStreamDestination();
-        audioCtx.createMediaStreamSource(new MediaStream([audioTrack])).connect(mix);
-        audioCtx.createMediaStreamSource(micStream).connect(mix);
+        sourceFor(new MediaStream([audioTrack])).connect(mix);
+        sourceFor(micStream).connect(mix);
         recTrack = mix.stream.getAudioTracks()[0];
       }
       rec = buildRec();
@@ -1314,7 +1353,10 @@
     stopCapture();
     micStream?.getTracks().forEach((t) => t.stop());
     micStream = null; recTrack = null;
-    try { audioCtx && audioCtx.close(); } catch {}
+    runNodes.forEach((n) => { try { n.disconnect(); } catch {} });
+    runNodes = [];
+    runSources.clear();
+    audioCtx?.suspend().catch(() => {});
     audioCtx = null;
     micBtn.classList.remove('on'); micLabel.textContent = T('micStart');
     pipSync?.(); desktopSync?.();
@@ -1327,6 +1369,8 @@
 
   micBtn.onclick = () => (running ? stop() : start());
   document.addEventListener('visibilitychange', async () => {
+    // iOS interrupts audio while another app (e.g. a phone call) is in front; pick it back up.
+    if (running && document.visibilityState === 'visible') sharedCtx?.resume().catch(() => {});
     if (running && document.visibilityState === 'visible' && !wakeLock) {
       try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
     }
