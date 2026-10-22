@@ -340,6 +340,7 @@
   </div>
   <p class="foot" data-stt="ai" data-i18n-html="noteStt"></p>
   <button class="done-bottom" value="ok" data-i18n="done"></button>
+  <p class="foot" id="appVersion" style="text-align:center"></p>
 </form>
 </dialog>
 
@@ -1456,6 +1457,8 @@
     if (!statusEl.classList.contains('err')) setStatus(running ? T('listening') : '');
   };
   applyLang();
+  // Shown at the bottom of Settings, to check which version a phone is running.
+  $('appVersion').textContent = 'v2026.10.22';
 
   try {
     const saved = JSON.parse(sessionStorage.getItem(RESTORE) || 'null');
