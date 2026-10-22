@@ -1393,7 +1393,19 @@
   // The recognizer restarts itself from onend with the new language.
   function restart() { if (!rec) return; rec.lang = settings.src; try { rec.abort(); } catch {} }
 
-  micBtn.onclick = () => (running ? stop() : start());
+  // iPhone / iPad with the browser recognizer: after Stop it never gets the microphone back in the
+  // same page (only the first Start after loading works), so reload after Stop and restore the
+  // transcript from sessionStorage.
+  const RESTORE = 'mt.restore';
+  async function stopByUser() {
+    stop();
+    if (!isIOS || settings.stt === 'ai') return;
+    // Let translations still on their way land first (at most 3 s).
+    for (let i = 0; i < 30 && segments.some((s) => !s.zh); i++) await new Promise((r) => setTimeout(r, 100));
+    try { sessionStorage.setItem(RESTORE, JSON.stringify(segments)); } catch { return; }
+    location.reload();
+  }
+  micBtn.onclick = () => (running ? stopByUser() : start());
   document.addEventListener('visibilitychange', async () => {
     // iOS interrupts audio while another app (e.g. a phone call) is in front; pick it back up.
     if (running && document.visibilityState === 'visible') sharedCtx?.resume().catch(() => {});
@@ -1444,6 +1456,23 @@
     if (!statusEl.classList.contains('err')) setStatus(running ? T('listening') : '');
   };
   applyLang();
+
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(RESTORE) || 'null');
+    sessionStorage.removeItem(RESTORE);
+    for (const s of saved || []) {
+      const seg = { ...s, time: new Date(s.time) };
+      const el = makeSeg(seg.who === 'me' ? 'me' : '');
+      segments.push(seg);
+      el.querySelector('.zh').textContent = seg.zh;
+      el.querySelector('.en').textContent = seg.en === seg.zh ? '' : seg.en;
+      if (seg.who) el.dataset.who = seg.who;
+      el.dataset.time = fmtTime(seg.time);
+      renderMeta(el);
+      list.appendChild(el);
+    }
+    if (saved?.length) { scrollDown(true); setStatus(T('stopped')); }
+  } catch {}
 
   if (!SR && settings.stt !== 'ai') setStatus(T('noSR'), true);
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
