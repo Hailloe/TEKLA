@@ -1119,6 +1119,7 @@
   let rec = null, wakeLock = null, restartTimer = null, capture = null, audioTrack = null;
   let micStream = null, audioCtx = null, recTrack = null, stopPipelines = [];
   const recStart = (r) => {
+    recEnded = new Promise((res) => (markEnded = res));
     try {
       recTrack ? r.start(recTrack) : r.start();
     } catch (e) {
@@ -1153,6 +1154,7 @@
   }
 
   // Volume meter, so it is obvious whether any sound reaches the page at all.
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   let meterMic = null, meterTimer = null, quietSince = 0, quietShown = false;
   // Any sign of sound (meter level, recognized words) clears the "hears nothing" warning.
   function markSound() {
@@ -1179,6 +1181,9 @@
   async function startMeter() {
     try {
       const track = recTrack || audioTrack || micStream?.getAudioTracks()[0];
+      // On iPhone / iPad a second microphone stream next to the browser recognizer can take the
+      // microphone away from it, so the meter is left out there.
+      if (!track && isIOS) return;
       if (!track) meterMic = await openMic();
       const stream = track ? new MediaStream([track]) : meterMic;
       const ctx = getAudioCtx();
@@ -1238,12 +1243,14 @@
     capture = null; audioTrack = null;
   }
 
-  // Resolves when the last recognizer has fully ended; iOS cannot start a new one before that.
-  let recEnded = Promise.resolve();
-  function buildRec() {
-    const r = new SR();
-    let markEnded;
-    recEnded = new Promise((res) => (markEnded = res));
+  // Resolves when the recognizer has fully ended; iOS cannot start it again before that.
+  let recEnded = Promise.resolve(), markEnded = () => {};
+  // One recognizer for the life of the page. iOS Safari keeps restarting the same one fine, but a
+  // second one created after Stop → Start never gets the microphone.
+  let recInst = null;
+  function getRec() {
+    if (recInst) { recInst.lang = settings.src; return recInst; }
+    const r = recInst = new SR();
     r.lang = settings.src;
     r.continuous = true;
     r.interimResults = true;
@@ -1332,7 +1339,7 @@
         sourceFor(micStream).connect(mix);
         recTrack = mix.stream.getAudioTracks()[0];
       }
-      rec = buildRec();
+      rec = getRec();
       recStart(rec);
     }
     micBtn.classList.add('on'); micLabel.textContent = T('micStop');
@@ -1365,7 +1372,8 @@
     wakeLock = null;
   }
   // Language change: the browser recognizer must restart; AI recognition reads it per request.
-  function restart() { if (!rec) return; try { rec.abort(); } catch {} rec = buildRec(); recStart(rec); }
+  // The recognizer restarts itself from onend with the new language.
+  function restart() { if (!rec) return; rec.lang = settings.src; try { rec.abort(); } catch {} }
 
   micBtn.onclick = () => (running ? stop() : start());
   document.addEventListener('visibilitychange', async () => {
