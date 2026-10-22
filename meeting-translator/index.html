@@ -405,7 +405,7 @@
       pipListening: '正在聆听…翻译会显示在这里', pipIdle: '点右上角「▶ 开始」，翻译会像字幕一样显示在这里',
       who_me: '我', who_them: '对方',
       listening: '正在聆听…', listeningSystem: '正在聆听电脑声音…', listeningBoth: '正在聆听电脑声音和我的麦克风…', aiPrefix: 'AI 识别：',
-      stopped: '已停止', heard: '听到说话了，正在识别…', recognizing: '识别中…', soundBack: '收到声音了，正在聆听…',
+      stopped: '已停止', pausedIOS: '已停止（麦克风 10 分钟内仍保持打开，点开始立即继续）', stoppedIOS: '已完全停止。要重新开始，请把 App 从后台划掉再打开', heard: '听到说话了，正在识别…', recognizing: '识别中…', soundBack: '收到声音了，正在聆听…',
       errPip: (m) => '无法打开小窗：' + m,
       translateFail: '翻译失败', svcErr: '服务错误', sttName: 'AI 识别',
       connFail: (n) => n + ' 连接失败（网络不通，或该服务不允许网页直接调用）',
@@ -466,7 +466,7 @@
       pipListening: 'Listening… translations will appear here', pipIdle: 'Press "▶ Start" (top right); translations appear here like subtitles',
       who_me: 'Me', who_them: 'Them',
       listening: 'Listening…', listeningSystem: 'Listening to computer audio…', listeningBoth: 'Listening to computer audio and my mic…', aiPrefix: 'AI: ',
-      stopped: 'Stopped', heard: 'Speech detected, recognizing…', recognizing: 'Recognizing…', soundBack: 'Sound detected, listening…',
+      stopped: 'Stopped', pausedIOS: 'Stopped (the microphone stays open for 10 minutes so Start resumes at once)', stoppedIOS: 'Fully stopped. To start again, swipe the app away and reopen it', heard: 'Speech detected, recognizing…', recognizing: 'Recognizing…', soundBack: 'Sound detected, listening…',
       errPip: (m) => "Can't open the floating window: " + m,
       translateFail: 'Translation failed', svcErr: 'service error', sttName: 'AI recognition',
       connFail: (n) => n + ": connection failed (network down, or the service doesn't allow calls from a web page)",
@@ -1274,6 +1274,7 @@
     r.onsoundstart = () => { recSound = true; };
     r.onsoundend = () => { recSound = false; };
     r.onresult = (ev) => {
+      if (paused) return;
       markSound();
       recLevel = 1;
       let interim = '';
@@ -1284,7 +1285,7 @@
       }
       if (interim.trim()) showLive(interim.trim());
     };
-    r.onspeechstart = () => { if (!quietShown && !statusEl.classList.contains('err')) setStatus(T('heard')); };
+    r.onspeechstart = () => { if (!paused && !quietShown && !statusEl.classList.contains('err')) setStatus(T('heard')); };
     r.onerror = (ev) => {
       if (ev.error === 'no-speech' || ev.error === 'aborted') return;
       if (ev.error === 'audio-capture') { setStatus(T('audioCapture'), true); return; }
@@ -1301,7 +1302,7 @@
     // Restart right away: words spoken while it is down are lost.
     r.onend = () => {
       markEnded();
-      if (liveEl && liveText) commit(liveText);
+      if (liveEl && liveText && !paused) commit(liveText);
       liveText = '';
       if (running && r === rec) { clearTimeout(restartTimer); restartTimer = setTimeout(() => recStart(r), 30); }
     };
@@ -1394,19 +1395,33 @@
   // The recognizer restarts itself from onend with the new language.
   function restart() { if (!rec) return; rec.lang = settings.src; try { rec.abort(); } catch {} }
 
-  // iPhone / iPad with the browser recognizer: after Stop it never gets the microphone back in the
-  // same page (only the first Start after loading works), so reload after Stop and restore the
-  // transcript from sessionStorage.
-  const RESTORE = 'mt.restore';
-  async function stopByUser() {
-    stop();
-    if (!isIOS || settings.stt === 'ai') return;
-    // Let translations still on their way land first (at most 3 s).
-    for (let i = 0; i < 30 && segments.some((s) => !s.zh); i++) await new Promise((r) => setTimeout(r, 100));
-    try { sessionStorage.setItem(RESTORE, JSON.stringify(segments)); } catch { return; }
-    location.reload();
+  // iPhone / iPad with the browser recognizer: once stopped it never gets the microphone back
+  // until the app is closed and reopened (reloading the page does not help in the home-screen
+  // app). So Stop only pauses there: the recognizer keeps running, its results are dropped, and
+  // Start resumes at once. After 10 minutes paused it is stopped for real.
+  let paused = false, pauseTimer = null;
+  const PAUSE_LIMIT = 10 * 60 * 1000;
+  const pauseOnly = () => isIOS && settings.stt !== 'ai';
+  function showRunning(on) {
+    micBtn.classList.toggle('on', on); micLabel.textContent = T(on ? 'micStop' : 'micStart');
+    pipSync?.(); desktopSync?.();
   }
-  micBtn.onclick = () => (running ? stopByUser() : start());
+  function stopByUser() {
+    if (!pauseOnly()) { stop(); return; }
+    paused = true;
+    if (liveEl) { liveEl.remove(); liveEl = null; liveText = ''; liveReq++; }
+    showRunning(false);
+    setStatus(T('pausedIOS'));
+    pauseTimer = setTimeout(() => { paused = false; stop(); setStatus(T('stoppedIOS'), true); }, PAUSE_LIMIT);
+  }
+  function startByUser() {
+    if (!paused) { start(); return; }
+    paused = false;
+    clearTimeout(pauseTimer);
+    showRunning(true);
+    setStatus(T('listening'));
+  }
+  micBtn.onclick = () => (running && !paused ? stopByUser() : startByUser());
   document.addEventListener('visibilitychange', async () => {
     // iOS interrupts audio while another app (e.g. a phone call) is in front; pick it back up.
     if (running && document.visibilityState === 'visible') sharedCtx?.resume().catch(() => {});
@@ -1445,7 +1460,7 @@
     document.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = T(el.dataset.i18nTitle); el.setAttribute('aria-label', el.title); });
     document.querySelectorAll('[data-i18n-ph]').forEach((el) => { el.placeholder = T(el.dataset.i18nPh); });
     document.querySelectorAll('.seg').forEach(renderMeta);
-    micLabel.textContent = T(running ? 'micStop' : 'micStart');
+    micLabel.textContent = T(running && !paused ? 'micStop' : 'micStart');
     $('langBtn').textContent = lang === 'zh' ? 'EN' : '中文';
     $('toggleEn').classList.toggle('active', settings.showEn);
     pipSync?.(); desktopSync?.();
@@ -1458,24 +1473,8 @@
   };
   applyLang();
   // Shown at the bottom of Settings, to check which version a phone is running.
-  $('appVersion').textContent = 'v2026.10.22';
+  $('appVersion').textContent = 'v2026.10.22b';
 
-  try {
-    const saved = JSON.parse(sessionStorage.getItem(RESTORE) || 'null');
-    sessionStorage.removeItem(RESTORE);
-    for (const s of saved || []) {
-      const seg = { ...s, time: new Date(s.time) };
-      const el = makeSeg(seg.who === 'me' ? 'me' : '');
-      segments.push(seg);
-      el.querySelector('.zh').textContent = seg.zh;
-      el.querySelector('.en').textContent = seg.en === seg.zh ? '' : seg.en;
-      if (seg.who) el.dataset.who = seg.who;
-      el.dataset.time = fmtTime(seg.time);
-      renderMeta(el);
-      list.appendChild(el);
-    }
-    if (saved?.length) { scrollDown(true); setStatus(T('stopped')); }
-  } catch {}
 
   if (!SR && settings.stt !== 'ai') setStatus(T('noSR'), true);
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
